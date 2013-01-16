@@ -478,10 +478,13 @@ def main():
 		parser.add_argument('-w', '--web-root', dest = 'web_root', action = 'store', default = '.', help = 'path to the web root directory')
 		parser.add_argument('-p', '--port', dest = 'port', action = 'store', default = 8080, type = int, help = 'port to serve on')
 		parser.add_argument('-i', '--ip', dest = 'ip', action = 'store', default = '0.0.0.0', help = 'the ip address to serve on')
+		parser.add_argument('--password', dest = 'password', action = 'store', default = None, help = 'password to use for basic authentication')
 		parser.add_argument('-v', '--version', action = 'version', version = parser.prog + ' Version: ' + __version__)
 		arguments = parser.parse_args()
 
 		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (arguments.ip, arguments.port))
+		if arguments.password:
+			server.auth_add_creds('', arguments.password)
 		web_root = arguments.web_root
 	except ImportError:
 		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler)
