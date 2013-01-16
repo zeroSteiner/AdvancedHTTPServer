@@ -34,6 +34,7 @@ __version__ = '0.1'
 __all__ = [ 'AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient' ]
 
 import os
+import re
 import cgi
 import pdb
 import sys
@@ -107,6 +108,7 @@ class AdvancedHTTPServerNonThreaded(HTTPServer):
 		self.allow_reuse_address = True
 		self.using_ssl = False
 		self.serve_files = False
+		self.serve_files_root = os.getcwd()
 		self.serve_robots_txt = True
 		self.basic_auth = None
 		self.robots_txt = 'User-agent: *\nDisallow: /\n'
@@ -183,15 +185,16 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 			self.wfile.write(self.server.robots_txt)
 			return
 
-		if self.path in self.handler_map:
-			self.handler_map[self.path](query)
-			return
+		for (path_regex, handler) in self.handler_map.items():
+			if re.match(path_regex, self.path):
+				handler(query)
+				return
 
 		if not self.server.serve_files:
 			self.respond_not_found()
 			return
 
-		file_path = os.getcwd()
+		file_path = self.server.serve_files_root
 		file_path = os.path.join(file_path, tmp_path)
 		if os.path.isdir(file_path):
 			if not self.original_path.endswith('/'):
@@ -440,6 +443,14 @@ class AdvancedHTTPServer(object):
 		self.http_server.serve_files = bool(value)
 
 	@property
+	def serve_files_root(self):
+		return self.http_server.serve_files_root
+
+	@serve_files_root.setter
+	def serve_files_root(self, value):
+		self.http_server.serve_files_root = os.path.abspath(value)
+
+	@property
 	def serve_robots_txt(self):
 		return self.http_server.serve_robots_txt
 
@@ -461,10 +472,23 @@ class AdvancedHTTPServer(object):
 		self.http_server.basic_auth[username] = {'value':password, 'type':pwtype}
 
 def main():
-	server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler)
+	try:
+		import argparse
+		parser = argparse.ArgumentParser(description = 'AdvancedHTTPServer', conflict_handler='resolve')
+		parser.add_argument('-w', '--web-root', dest = 'web_root', action = 'store', default = '.', help = 'path to the web root directory')
+		parser.add_argument('-p', '--port', dest = 'port', action = 'store', default = 8080, type = int, help = 'port to serve on')
+		parser.add_argument('-i', '--ip', dest = 'ip', action = 'store', default = '0.0.0.0', help = 'the ip address to serve on')
+		parser.add_argument('-v', '--version', action = 'version', version = parser.prog + ' Version: ' + __version__)
+		arguments = parser.parse_args()
+
+		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (arguments.ip, arguments.port))
+		web_root = arguments.web_root
+	except ImportError:
+		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler)
+		web_root = '.'
 
 	server.serve_files = True
-
+	server.serve_files_root = web_root
 	server.serve_forever()
 	return 0
 
