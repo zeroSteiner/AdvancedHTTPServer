@@ -61,7 +61,7 @@ SERIALIZER_DRIVERS['binary/python-pickle'] = {'loads':pickle.loads, 'dumps':pick
 SERIALIZER_DRIVERS['binary/json'] = {'loads':json.loads, 'dumps':json.dumps}
 
 try:
-  import msgpack
+	import msgpack
 	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads':msgpack.loads, 'dumps':msgpack.dumps}
 except ImportError:
 	pass
