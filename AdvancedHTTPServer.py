@@ -43,6 +43,8 @@ import pickle
 import shutil
 import hashlib
 import httplib
+import logging
+import logging.handlers
 import mimetypes
 import posixpath
 
@@ -66,6 +68,9 @@ try:
 	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads':msgpack.loads, 'dumps':msgpack.dumps}
 except ImportError:
 	pass
+
+if hasattr(logging, 'NullHandler'):
+	logging.getLogger('AdvancedHTTPServer').addHandler(logging.NullHandler())
 
 class AdvancedHTTPServerRPCClient(object):
 	def __init__(self, address, use_ssl = False, username = None, password = None, uri_base = '/'):
@@ -105,6 +110,7 @@ class AdvancedHTTPServerRPCClient(object):
 
 class AdvancedHTTPServerNonThreaded(HTTPServer):
 	def __init__(self, *args, **kwargs):
+		self.logger = logging.getLogger('AdvancedHTTPServer')
 		self.allow_reuse_address = True
 		self.using_ssl = False
 		self.serve_files = False
@@ -332,7 +338,13 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 		query = parse_qs(self.rfile.read(int(self.headers.getheader('content-length') or 0)), keep_blank_values = 1)
 
 		self.dispatch_handler(query)
-		return
+		returnserve_files
+
+	def do_OPTIONS(self):
+		available_methods = map(lambda x: x[3:], filter(lambda x: x.startswith('do_'), dir(self)))
+		self.send_response(200)
+		self.send_header('Allow', ','.join(available_methods))
+		self.end_headers()
 
 	def do_RPC(self):
 		if not self.check_authorization():
@@ -391,6 +403,11 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 		self.end_headers()
 		self.wfile.write(response)
 		return
+
+	def log_message(self, format, *args):
+		if not hasattr(self.server, 'logger'):
+			return
+		self.server.logger.info(format % args)
 
 class AdvancedHTTPServer(object):
 	"""
@@ -479,8 +496,23 @@ def main():
 		parser.add_argument('-p', '--port', dest = 'port', action = 'store', default = 8080, type = int, help = 'port to serve on')
 		parser.add_argument('-i', '--ip', dest = 'ip', action = 'store', default = '0.0.0.0', help = 'the ip address to serve on')
 		parser.add_argument('--password', dest = 'password', action = 'store', default = None, help = 'password to use for basic authentication')
+		parser.add_argument('--log-file', dest = 'log_file', action = 'store', default = None, help = 'log information to a file')
 		parser.add_argument('-v', '--version', action = 'version', version = parser.prog + ' Version: ' + __version__)
+		parser.add_argument('-L', '--log', dest = 'loglvl', action = 'store', choices = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default = 'INFO', help = 'set the logging level')
 		arguments = parser.parse_args()
+		
+		logging.getLogger('').setLevel(logging.DEBUG)
+		console_log_handler = logging.StreamHandler()
+		console_log_handler.setLevel(getattr(logging, arguments.loglvl))
+		console_log_handler.setFormatter(logging.Formatter("%(levelname)-8s %(message)s"))
+		logging.getLogger('').addHandler(console_log_handler)
+
+		if arguments.log_file:
+			main_file_handler = logging.handlers.RotatingFileHandler(arguments.log_file, maxBytes = 262144, backupCount = 5)
+			main_file_handler.setLevel(logging.DEBUG)
+			main_file_handler.setFormatter(logging.Formatter("%(asctime)s %(name)-50s %(levelname)-10s %(message)s"))
+			logging.getLogger('').setLevel(logging.DEBUG)
+			logging.getLogger('').addHandler(main_file_handler)
 
 		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (arguments.ip, arguments.port))
 		if arguments.password:
@@ -492,7 +524,11 @@ def main():
 
 	server.serve_files = True
 	server.serve_files_root = web_root
-	server.serve_forever()
+	try:
+		server.serve_forever()
+	except Exception as err:
+		pass
+	logging.shutdown()
 	return 0
 
 if __name__ == '__main__':
