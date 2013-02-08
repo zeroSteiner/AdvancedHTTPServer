@@ -130,8 +130,9 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 	extensions_map.update({
 		'': 'application/octet-stream', # Default
 		'.py': 'text/plain',
-		'.c': 'text/plain',
-		'.h': 'text/plain',
+		'.rb': 'text/plain',
+		'.c':  'text/plain',
+		'.h':  'text/plain',
 		})
 
 	def __init__(self, *args, **kwargs):
@@ -304,6 +305,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 			username = auth_info.split(':')[0]
 			password = ':'.join(auth_info.split(':')[1:])
 			if not username in self.server.basic_auth:
+				self.server.logger.warning('received invalid username: ' + username)
 				return False
 			password_data = self.server.basic_auth[username]
 
@@ -316,6 +318,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 			elif password_data['type'] == 'sha1':
 				if hashlib.new('sha1', password).hexdigest() == password_data['value']:
 					return True
+			self.server.logger.warning('received invalid password from user: ' + username)
 			return False
 		except:
 			return False
@@ -381,6 +384,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 			self.send_error(501, 'Method Not Implemented')
 			return
 
+		self.server.logger.info('running RPC method: ' + self.path)
 		response = { 'result':None, 'exception_occurred':False }
 		try:
 			result = self.rpc_handler_map[self.path](*data)
@@ -391,6 +395,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 			exc['name'] = error.__class__.__name__
 			exc['message'] = error.message
 			response['exception'] = exc
+			self.server.logger.error('error: ' + error.__class__.__name__ + ' occurred while calling RPC method: ' + self.path)
 
 		try:
 			response = serializer['dumps'](response)
@@ -404,10 +409,15 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 		self.wfile.write(response)
 		return
 
+	def log_error(self, format, *args):
+		if not hasattr(self.server, 'logger'):
+			return
+		self.server.logger.info(self.address_string() + ' ' + format % args)
+
 	def log_message(self, format, *args):
 		if not hasattr(self.server, 'logger'):
 			return
-		self.server.logger.info(format % args)
+		self.server.logger.info(self.address_string() + ' ' + format % args)
 
 class AdvancedHTTPServer(object):
 	"""
@@ -504,13 +514,13 @@ def main():
 		logging.getLogger('').setLevel(logging.DEBUG)
 		console_log_handler = logging.StreamHandler()
 		console_log_handler.setLevel(getattr(logging, arguments.loglvl))
-		console_log_handler.setFormatter(logging.Formatter("%(levelname)-8s %(message)s"))
+		console_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s"))
 		logging.getLogger('').addHandler(console_log_handler)
 
 		if arguments.log_file:
 			main_file_handler = logging.handlers.RotatingFileHandler(arguments.log_file, maxBytes = 262144, backupCount = 5)
 			main_file_handler.setLevel(logging.DEBUG)
-			main_file_handler.setFormatter(logging.Formatter("%(asctime)s %(name)-50s %(levelname)-10s %(message)s"))
+			main_file_handler.setFormatter(logging.Formatter("%(asctime)s %(name)-30s %(levelname)-10s %(message)s"))
 			logging.getLogger('').setLevel(logging.DEBUG)
 			logging.getLogger('').addHandler(main_file_handler)
 
