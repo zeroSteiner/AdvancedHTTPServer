@@ -410,13 +410,9 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 		return
 
 	def log_error(self, format, *args):
-		if not hasattr(self.server, 'logger'):
-			return
-		self.server.logger.info(self.address_string() + ' ' + format % args)
+		self.server.logger.warning(self.address_string() + ' ' + format % args)
 
 	def log_message(self, format, *args):
-		if not hasattr(self.server, 'logger'):
-			return
 		self.server.logger.info(self.address_string() + ' ' + format % args)
 
 class AdvancedHTTPServer(object):
@@ -440,15 +436,18 @@ class AdvancedHTTPServer(object):
 		self.address = address
 		self.use_ssl = use_ssl
 		self.ssl_certfile = ssl_certfile
+		self.logger = logging.getLogger('AdvancedHTTPServer')
 
 		if use_threads:
 			self.http_server = AdvancedHTTPServerThreaded(address, request_handler)
 		else:
 			self.http_server = AdvancedHTTPServerNonThreaded(address, request_handler)
+		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
 
 		if use_ssl:
 			self.http_server.socket = ssl.wrap_socket(self.http_server.socket, certfile = ssl_certfile, server_side = True)
 			self.http_server.using_ssl = True
+			self.logger.info(address[0] + ':' + str(address[1]) + ' - ssl has been enabled')
 
 	def fork_and_serve_forever(self):
 		if not hasattr(os, 'fork'):
@@ -456,6 +455,8 @@ class AdvancedHTTPServer(object):
 		child_pid = os.fork()
 		if child_pid == 0:
 			self.serve_forever()
+		else:
+			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - forked child process: ' + str(child_pid))
 		return child_pid
 
 	def serve_forever(self):
@@ -467,7 +468,14 @@ class AdvancedHTTPServer(object):
 
 	@serve_files.setter
 	def serve_files(self, value):
-		self.http_server.serve_files = bool(value)
+		value = bool(value)
+		if self.http_server.serve_files == value:
+			return
+		self.http_server.serve_files = value
+		if value:
+			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - serving files has been enabled')
+		else:
+			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - serving files has been disabled')
 
 	@property
 	def serve_files_root(self):
@@ -488,14 +496,17 @@ class AdvancedHTTPServer(object):
 	def auth_set(self, status):
 		if not bool(status):
 			self.http_server.basic_auth = None
+			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been disabled')
 		else:
 			self.http_server.basic_auth = {}
+			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
 
 	def auth_add_creds(self, username, password, pwtype = 'plain'):
 		if not pwtype in ('plain', 'md5', 'sha1'):
 			raise Exception('invalid password type, must be (\'plain\', \'md5\', \'sha1\')')
 		if self.http_server.basic_auth == None:
 			self.http_server.basic_auth = {}
+			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
 		self.http_server.basic_auth[username] = {'value':password, 'type':pwtype}
 
 def main():
