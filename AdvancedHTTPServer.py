@@ -503,6 +503,7 @@ class AdvancedHTTPServer(object):
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
 
 	def auth_add_creds(self, username, password, pwtype = 'plain'):
+		pwtype = pwtype.lower()
 		if not pwtype in ('plain', 'md5', 'sha1'):
 			raise Exception('invalid password type, must be (\'plain\', \'md5\', \'sha1\')')
 		if self.http_server.basic_auth == None:
