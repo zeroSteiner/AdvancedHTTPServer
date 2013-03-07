@@ -30,6 +30,9 @@
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #  
 
+#  Homepage: https://gist.github.com/zeroSteiner/4502576
+#  Author:   Spencer McIntyre (zeroSteiner)
+
 __version__ = '0.1'
 __all__ = [ 'AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient' ]
 
@@ -72,6 +75,65 @@ except ImportError:
 
 if hasattr(logging, 'NullHandler'):
 	logging.getLogger('AdvancedHTTPServer').addHandler(logging.NullHandler())
+
+class SectionConfigParser:
+	__version__ = '0.1'
+	def __init__(self, section_name, config_parser):
+		self.section_name = section_name
+		self.config_parser = config_parser
+
+	def get_raw(self, option, opt_type, default = None):
+		get_func = getattr(self.config_parser, 'get' + opt_type)
+		if default == None:
+			return get_func(self.section_name, option)
+		elif self.config_parser.has_option(self.section_name, option):
+			return get_func(self.section_name, option)
+		else:
+			return default
+
+	def get(self, option, default = None):
+		return self.get_raw(option, '', default)
+
+	def getint(self, option, default = None):
+		return self.get_raw(option, 'int', default)
+
+	def getfloat(self, option, default = None):
+		return self.get_raw(option, 'float', default)
+
+	def getboolean(self, option, default = None):
+		return self.get_raw(option, 'boolean', default)
+
+	def has_option(self, option):
+		return self.config_parser.has_option(self.section_name, option)
+
+	def options(self):
+		return self.config_parser.options(self.section_name)
+
+	def items(self):
+		self.config_parser.items(self.section_name)
+
+def get_server_from_config(config, section_name):
+	config = SectionConfigParser(section_name, config)
+	port = config.getint('port')
+	web_root = config.get('web_root')
+
+	ip = config.get('ip', '0.0.0.0')
+	use_ssl = config.getboolean('use_ssl', False)
+	ssl_certfile = None
+	if use_ssl:
+		ssl_certfile = config.get('ssl_cert')
+
+	password = None
+	if config.has_option('password'):
+		password = config.get('password')
+		password_type = config.get('password_type', 'md5')
+
+	server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (ip, port), use_ssl = use_ssl, ssl_certfile = ssl_certfile)
+	if password:
+		server.auth_add_creds('', password, pwtype = password_type)
+	server.serve_files = True
+	server.serve_files_root = web_root
+	return server
 
 class AdvancedHTTPServerRPCClient(object):
 	def __init__(self, address, use_ssl = False, username = None, password = None, uri_base = '/'):
@@ -509,21 +571,26 @@ class AdvancedHTTPServer(object):
 		if self.http_server.basic_auth == None:
 			self.http_server.basic_auth = {}
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
+		if pwtype != 'plain':
+			password = password.lower()
 		self.http_server.basic_auth[username] = {'value':password, 'type':pwtype}
 
 def main():
 	try:
 		import argparse
+		import ConfigParser
 		parser = argparse.ArgumentParser(description = 'AdvancedHTTPServer', conflict_handler='resolve')
+		parser.epilog = 'When a config file is specified with --config the --ip, --port and --web-root options are all ignored.'
 		parser.add_argument('-w', '--web-root', dest = 'web_root', action = 'store', default = '.', help = 'path to the web root directory')
 		parser.add_argument('-p', '--port', dest = 'port', action = 'store', default = 8080, type = int, help = 'port to serve on')
 		parser.add_argument('-i', '--ip', dest = 'ip', action = 'store', default = '0.0.0.0', help = 'the ip address to serve on')
 		parser.add_argument('--password', dest = 'password', action = 'store', default = None, help = 'password to use for basic authentication')
 		parser.add_argument('--log-file', dest = 'log_file', action = 'store', default = None, help = 'log information to a file')
+		parser.add_argument('-c', '--conf', dest = 'config', action = 'store', default = None, type = argparse.FileType('r'), help = 'read settings from a config file')
 		parser.add_argument('-v', '--version', action = 'version', version = parser.prog + ' Version: ' + __version__)
 		parser.add_argument('-L', '--log', dest = 'loglvl', action = 'store', choices = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default = 'INFO', help = 'set the logging level')
 		arguments = parser.parse_args()
-		
+
 		logging.getLogger('').setLevel(logging.DEBUG)
 		console_log_handler = logging.StreamHandler()
 		console_log_handler.setLevel(getattr(logging, arguments.loglvl))
@@ -537,10 +604,16 @@ def main():
 			logging.getLogger('').setLevel(logging.DEBUG)
 			logging.getLogger('').addHandler(main_file_handler)
 
-		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (arguments.ip, arguments.port))
+		if arguments.config:
+			config = ConfigParser.ConfigParser()
+			config.readfp(arguments.config)
+			server = get_server_from_config(config, 'server')
+			web_root = server.serve_files_root
+		else:
+			server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (arguments.ip, arguments.port))
+			web_root = arguments.web_root
 		if arguments.password:
 			server.auth_add_creds('', arguments.password)
-		web_root = arguments.web_root
 	except ImportError:
 		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler)
 		web_root = '.'
