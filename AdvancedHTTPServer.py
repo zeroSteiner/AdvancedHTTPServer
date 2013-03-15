@@ -33,6 +33,28 @@
 #  Homepage: https://gist.github.com/zeroSteiner/4502576
 #  Author:   Spencer McIntyre (zeroSteiner)
 
+"""
+# The AdvancedHTTPServer systemd service unit file
+#
+# Quick HowTo:
+# 1. Copy this file to /etc/systemd/system/pyhttpd.service
+# 2. Edit <USER> and run parameters appropriately in the ExecStart option
+# 3. Set configuration settings in /etc/pyhttpd.conf
+# 4. Run "systemctl daemon-reload"
+
+[Unit]
+Description=Python Advanced HTTP Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/sbin/runuser -l <USER> -c "/usr/bin/python -m AdvancedHTTPServer -c /etc/pyhttpd.conf"
+ExecStop=/bin/kill -INT $MAINPID
+
+[Install]
+WantedBy=multi-user.target
+"""
+
 __version__ = '0.1'
 __all__ = [ 'AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient' ]
 
