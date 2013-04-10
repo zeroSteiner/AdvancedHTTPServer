@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 #
 #  AdvancedHTTPServer.py
-#  
+#
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are
 #  met:
-#  
+#
 #  * Redistributions of source code must retain the above copyright
 #    notice, this list of conditions and the following disclaimer.
 #  * Redistributions in binary form must reproduce the above
@@ -16,7 +16,7 @@
 #  * Neither the name of the SecureState Consulting nor the names of its
 #    contributors may be used to endorse or promote products derived from
 #    this software without specific prior written permission.
-#  
+#
 #  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
 #  "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
 #  LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
@@ -28,7 +28,7 @@
 #  THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 #  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#  
+#
 
 #  Homepage: https://gist.github.com/zeroSteiner/4502576
 #  Author:   Spencer McIntyre (zeroSteiner)
@@ -161,7 +161,7 @@ class AdvancedHTTPServerRPCClient(object):
 	def __init__(self, address, use_ssl = False, username = None, password = None, uri_base = '/'):
 		self.host = address[0]
 		self.port = address[1]
-		
+
 		self.use_ssl = use_ssl
 		self.uri_base = uri_base
 		self.username = username
@@ -171,7 +171,7 @@ class AdvancedHTTPServerRPCClient(object):
 			self.client = httplib.HTTPSConnection(self.host,self.port)
 		else:
 			self.client = httplib.HTTPConnection(self.host,self.port)
- 
+
 	def encode(self,data):
 		return pickle.dumps(data)
 
@@ -180,7 +180,7 @@ class AdvancedHTTPServerRPCClient(object):
 
 	def call(self, meth, *options):
 		options = self.encode(options)
-		
+
 		headers = {}
 		headers['Content-Type'] = 'binary/python-pickle'
 		headers['Content-Length'] = str(len(options))
@@ -270,7 +270,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 			tmp_path = os.path.join(tmp_path, word)
 		self.path = tmp_path
 
-		if self.path == '/robots.txt' and self.server.serve_robots_txt:
+		if self.path == 'robots.txt' and self.server.serve_robots_txt:
 			self.send_response(200)
 			self.send_header('Content-type', 'text/plain')
 			self.end_headers()
@@ -487,7 +487,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 		except:
 			self.send_error(500, 'Failed To Pack Response')
 			return
-		
+
 		self.send_response(200)
 		self.send_header('Content-Type', data_type)
 		self.end_headers()
