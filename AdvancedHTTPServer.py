@@ -420,13 +420,15 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 		return
 
 	def do_POST(self):
-		if not self.check_authorization(request_authentication = True):
-			self.respond_unauthorized()
+		if not self.check_authorization():
+			self.respond_unauthorized(request_authentication = True)
 			return
-		query = parse_qs(self.rfile.read(int(self.headers.getheader('content-length') or 0)), keep_blank_values = 1)
+		content_length = int(self.headers.getheader('content-length') or 0)
+		data = self.rfile.read(content_length)
+		query = parse_qs(data, keep_blank_values = 1)
 
 		self.dispatch_handler(query)
-		returnserve_files
+		return
 
 	def do_OPTIONS(self):
 		available_methods = map(lambda x: x[3:], filter(lambda x: x.startswith('do_'), dir(self)))
