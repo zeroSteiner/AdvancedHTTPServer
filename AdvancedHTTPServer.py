@@ -329,7 +329,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 				f.seek(0)
 				self.send_response(200)
 				encoding = sys.getfilesystemencoding()
-				self.send_header('Content-type', 'text/html; charset=' + encoding)
+				self.send_header('Content-Type', 'text/html; charset=' + encoding)
 				self.send_header('Content-Length', str(length))
 				self.end_headers()
 				shutil.copyfileobj(f, self.wfile)
