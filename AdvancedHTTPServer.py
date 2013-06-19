@@ -483,6 +483,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 			hmac_calculator.update(data)
 			if hmac_digest != hmac_calculator.hexdigest():
 				self.respond_unauthorized(request_authentication = True)
+				return
 
 		try:
 			data = serializer['loads'](data)
