@@ -200,6 +200,7 @@ class AdvancedHTTPServerNonThreaded(HTTPServer):
 		self.using_ssl = False
 		self.serve_files = False
 		self.serve_files_root = os.getcwd()
+		self.serve_files_list_directories = False # irrelevant if serve_files == False
 		self.serve_robots_txt = True
 		self.basic_auth = None
 		self.robots_txt = 'User-agent: *\nDisallow: /\n'
@@ -288,14 +289,14 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 
 		file_path = self.server.serve_files_root
 		file_path = os.path.join(file_path, tmp_path)
-		if os.path.isdir(file_path):
+		if os.path.isdir(file_path) and self.server.serve_files_list_directories:
 			if not self.original_path.endswith('/'):
 				# redirect browser - doing basically what apache does
 				self.send_response(301)
 				self.send_header('Location', self.path + '/')
 				self.end_headers()
 				return
-			for index in 'index.html', 'index.htm':
+			for index in ['index.html', 'index.htm']:
 				index = os.path.join(file_path, index)
 				if os.path.exists(index):
 					file_path = index
@@ -336,7 +337,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 				f.close()
 				return
 
-		if os.path.isfile(file_path):
+		elif os.path.isfile(file_path):
 			try:
 				file_obj = open(file_path, 'rb')
 			except IOError:
@@ -571,6 +572,14 @@ class AdvancedHTTPServer(object):
 	@serve_files_root.setter
 	def serve_files_root(self, value):
 		self.http_server.serve_files_root = os.path.abspath(value)
+
+	@property
+	def serve_files_list_directories(self):
+		return self.http_server.serve_files_list_directories
+
+	@serve_files_list_directories.setter
+	def serve_files_list_directories(self, value):
+		self.http_server.serve_files_list_directories = bool(value)
 
 	@property
 	def serve_robots_txt(self):
