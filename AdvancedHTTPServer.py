@@ -61,9 +61,9 @@ __all__ = [ 'AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedH
 import os
 import re
 import cgi
-import pdb
 import ssl
 import sys
+import hmac
 import json
 import pickle
 import shutil
@@ -158,7 +158,7 @@ def get_server_from_config(config, section_name):
 	return server
 
 class AdvancedHTTPServerRPCClient(object):
-	def __init__(self, address, use_ssl = False, username = None, password = None, uri_base = '/'):
+	def __init__(self, address, use_ssl = False, username = None, password = None, uri_base = '/', hmac_key = None):
 		self.host = address[0]
 		self.port = address[1]
 
@@ -166,7 +166,7 @@ class AdvancedHTTPServerRPCClient(object):
 		self.uri_base = uri_base
 		self.username = username
 		self.password = password
-
+		self.hmac_key = hmac_key
 		if self.use_ssl:
 			self.client = httplib.HTTPSConnection(self.host,self.port)
 		else:
@@ -184,11 +184,19 @@ class AdvancedHTTPServerRPCClient(object):
 		headers = {}
 		headers['Content-Type'] = 'binary/python-pickle'
 		headers['Content-Length'] = str(len(options))
+
+		if self.hmac_key:
+			hmac_calculator = hmac.new(self.hmac_key, digestmod = hashlib.sha1)
+			hmac_calculator.update(options)
+			headers['HMAC'] = hmac_calculator.hexdigest()
+
 		if self.username != None and self.password != None:
 			headers['Authorization'] = 'Basic ' + (self.username + ':' + self.password).encode('base64')
 
 		self.client.request("RPC", self.uri_base + meth, options, headers)
 		resp = self.client.getresponse()
+		if resp.status != 200:
+			raise Exception('received status: ' + str(resp.status))
 		resp = self.decode(resp.read())
 
 		return resp
@@ -202,6 +210,7 @@ class AdvancedHTTPServerNonThreaded(HTTPServer):
 		self.serve_files_root = os.getcwd()
 		self.serve_files_list_directories = False # irrelevant if serve_files == False
 		self.serve_robots_txt = True
+		self.rpc_hmac_key = None
 		self.basic_auth = None
 		self.robots_txt = 'User-agent: *\nDisallow: /\n'
 		HTTPServer.__init__(self, *args, **kwargs)
@@ -455,11 +464,27 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 		if not data_type in SERIALIZER_DRIVERS:
 			self.send_error(400, 'Invalid Content-Type')
 			return
-
 		serializer = SERIALIZER_DRIVERS[data_type]
+
 		try:
 			data_length = int(self.headers.getheader('content-length'))
 			data = self.rfile.read(data_length)
+		except:
+			self.send_error(400, 'Invalid Data')
+			return
+
+		hmac_digest = self.headers.getheader('hmac')
+		if self.server.rpc_hmac_key != None:
+			if not isinstance(hmac_digest, str):
+				self.respond_unauthorized(request_authentication = True)
+				return
+			hmac_digest = hmac_digest.lower()
+			hmac_calculator = hmac.new(self.server.rpc_hmac_key, digestmod = hashlib.sha1)
+			hmac_calculator.update(data)
+			if hmac_digest != hmac_calculator.hexdigest():
+				self.respond_unauthorized(request_authentication = True)
+
+		try:
 			data = serializer['loads'](data)
 			if type(data) == list:
 				data = tuple(data)
@@ -588,6 +613,14 @@ class AdvancedHTTPServer(object):
 	@serve_robots_txt.setter
 	def serve_robots_txt(self, value):
 		self.http_server.serve_robots_txt = bool(value)
+
+	@property
+	def rpc_hmac_key(self):
+		return self.http_server.rpc_hmac_key
+
+	@rpc_hmac_key.setter
+	def rpc_hmac_key(self, value):
+		self.http_server.rpc_hmac_key = str(value)
 
 	def auth_set(self, status):
 		if not bool(status):
