@@ -228,6 +228,7 @@ class AdvancedHTTPServerNonThreaded(HTTPServer):
 		self.rpc_hmac_key = None
 		self.basic_auth = None
 		self.robots_txt = 'User-agent: *\nDisallow: /\n'
+		self.server_version = 'HTTPServer/' + __version__
 		HTTPServer.__init__(self, *args, **kwargs)
 
 class AdvancedHTTPServerThreaded(ThreadingMixIn, AdvancedHTTPServerNonThreaded):
@@ -248,9 +249,11 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 	def __init__(self, *args, **kwargs):
 		self.handler_map = {}
 		self.rpc_handler_map = {}
-		self.server_version = 'HTTPServer/' + __version__
 		self.install_handlers()
 		BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
+
+	def version_string(self):
+		return self.server.server_version
 
 	def install_handlers(self):
 		pass # over ride me
@@ -641,6 +644,14 @@ class AdvancedHTTPServer(object):
 	@rpc_hmac_key.setter
 	def rpc_hmac_key(self, value):
 		self.http_server.rpc_hmac_key = str(value)
+
+	@property
+	def server_version(self):
+		return self.http_server.server_version
+
+	@server_version.setter
+	def server_version(self, value):
+		self.http_server.server_version = str(value)
 
 	def auth_set(self, status):
 		if not bool(status):
