@@ -460,6 +460,8 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 
 	def do_OPTIONS(self):
 		available_methods = map(lambda x: x[3:], filter(lambda x: x.startswith('do_'), dir(self)))
+		if 'RPC' in available_methods and len(self.rpc_handler_map) == 0:
+			available_methods.remove('RPC')
 		self.send_response(200)
 		self.send_header('Allow', ','.join(available_methods))
 		self.end_headers()
