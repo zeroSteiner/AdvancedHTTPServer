@@ -190,7 +190,7 @@ class AdvancedHTTPServerRPCClient(object):
 		headers['Content-Type'] = 'binary/python-pickle'
 		headers['Content-Length'] = str(len(options))
 
-		if self.hmac_key:
+		if self.hmac_key != None:
 			hmac_calculator = hmac.new(self.hmac_key, digestmod = hashlib.sha1)
 			hmac_calculator.update(options)
 			headers['HMAC'] = hmac_calculator.hexdigest()
@@ -202,8 +202,19 @@ class AdvancedHTTPServerRPCClient(object):
 		resp = self.client.getresponse()
 		if resp.status != 200:
 			raise AdvancedHTTPServerRPCError(resp.reason, resp.status)
-		resp = self.decode(resp.read())
-		return resp
+
+		resp_data = resp.read()
+		if self.hmac_key != None:
+			hmac_digest = resp.getheader('hmac')
+			if not isinstance(hmac_digest, str):
+				raise AdvancedHTTPServerRPCError('hmac validation error', resp.status)
+			hmac_digest = hmac_digest.lower()
+			hmac_calculator = hmac.new(self.hmac_key, digestmod = hashlib.sha1)
+			hmac_calculator.update(resp_data)
+			if hmac_digest != hmac_calculator.hexdigest():
+				raise AdvancedHTTPServerRPCError('hmac validation error', resp.status)
+		resp_data = self.decode(resp_data)
+		return resp_data
 
 class AdvancedHTTPServerNonThreaded(HTTPServer):
 	def __init__(self, *args, **kwargs):
@@ -477,8 +488,8 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 			self.send_error(400, 'Invalid Data')
 			return
 
-		hmac_digest = self.headers.getheader('hmac')
 		if self.server.rpc_hmac_key != None:
+			hmac_digest = self.headers.getheader('hmac')
 			if not isinstance(hmac_digest, str):
 				self.respond_unauthorized(request_authentication = True)
 				return
@@ -523,6 +534,10 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 
 		self.send_response(200)
 		self.send_header('Content-Type', data_type)
+		if self.server.rpc_hmac_key != None:
+			hmac_calculator = hmac.new(self.server.rpc_hmac_key, digestmod = hashlib.sha1)
+			hmac_calculator.update(response)
+			self.send_header('HMAC', hmac_calculator.hexdigest())
 		self.end_headers()
 		self.wfile.write(response)
 		return
