@@ -56,7 +56,7 @@ WantedBy=multi-user.target
 """
 
 __version__ = '0.1'
-__all__ = [ 'AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient' ]
+__all__ = [ 'AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError' ]
 
 import os
 import re
@@ -157,6 +157,11 @@ def get_server_from_config(config, section_name):
 	server.serve_files_root = web_root
 	return server
 
+class AdvancedHTTPServerRPCError(Exception):
+	def __init__(self, message, status):
+		self.message = message
+		self.status = status
+
 class AdvancedHTTPServerRPCClient(object):
 	def __init__(self, address, use_ssl = False, username = None, password = None, uri_base = '/', hmac_key = None):
 		self.host = address[0]
@@ -196,9 +201,8 @@ class AdvancedHTTPServerRPCClient(object):
 		self.client.request("RPC", self.uri_base + meth, options, headers)
 		resp = self.client.getresponse()
 		if resp.status != 200:
-			raise Exception('received status: ' + str(resp.status))
+			raise AdvancedHTTPServerRPCError(resp.reason, resp.status)
 		resp = self.decode(resp.read())
-
 		return resp
 
 class AdvancedHTTPServerNonThreaded(HTTPServer):
