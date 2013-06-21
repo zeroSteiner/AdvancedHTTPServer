@@ -556,8 +556,12 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 class AdvancedHTTPServer(object):
 	"""
 	Setable properties:
-		serve_files
-		serve_robots_txt
+		serve_files (boolean)
+		serve_files_root (string)
+		serve_files_list_directories (boolean)
+		serve_robots_txt (boolean)
+		rpc_hmac_key (string)
+		server_version (string)
 	"""
 	def __init__(self, request_handler, address = None, use_threads = True, use_ssl = False, ssl_certfile = None):
 		if address == None:
