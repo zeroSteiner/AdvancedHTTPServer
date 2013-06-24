@@ -158,9 +158,17 @@ def get_server_from_config(config, section_name):
 	return server
 
 class AdvancedHTTPServerRPCError(Exception):
-	def __init__(self, message, status):
+	def __init__(self, message, status, remote_exception = None):
 		self.message = message
 		self.status = status
+		self.remote_exception = remote_exception
+
+	def __repr__(self):
+		return "{0}(remote_exception={1})".format(self.__class__.__name__, self.is_remote_exception)
+
+	@property
+	def is_remote_exception(self):
+		return bool(self.remote_exception != None)
 
 class AdvancedHTTPServerRPCClient(object):
 	def __init__(self, address, use_ssl = False, username = None, password = None, uri_base = '/', hmac_key = None):
@@ -173,9 +181,9 @@ class AdvancedHTTPServerRPCClient(object):
 		self.password = password
 		self.hmac_key = hmac_key
 		if self.use_ssl:
-			self.client = httplib.HTTPSConnection(self.host,self.port)
+			self.client = httplib.HTTPSConnection(self.host, self.port)
 		else:
-			self.client = httplib.HTTPConnection(self.host,self.port)
+			self.client = httplib.HTTPConnection(self.host, self.port)
 
 	def encode(self,data):
 		return pickle.dumps(data)
@@ -214,7 +222,11 @@ class AdvancedHTTPServerRPCClient(object):
 			if hmac_digest != hmac_calculator.hexdigest():
 				raise AdvancedHTTPServerRPCError('hmac validation error', resp.status)
 		resp_data = self.decode(resp_data)
-		return resp_data
+		if not ('exception_occurred' in resp_data and 'result' in resp_data):
+			raise AdvancedHTTPServerRPCError('missing response information', resp.status)
+		if resp_data['exception_occurred']:
+			raise AdvancedHTTPServerRPCError('remote method incured an exception', resp.status, remote_exception = resp_data['exception'])
+		return resp_data['result']
 
 class AdvancedHTTPServerNonThreaded(HTTPServer):
 	def __init__(self, *args, **kwargs):
