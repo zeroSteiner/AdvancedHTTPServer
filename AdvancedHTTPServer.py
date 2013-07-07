@@ -235,7 +235,7 @@ class AdvancedHTTPServerNonThreaded(HTTPServer):
 		self.using_ssl = False
 		self.serve_files = False
 		self.serve_files_root = os.getcwd()
-		self.serve_files_list_directories = False # irrelevant if serve_files == False
+		self.serve_files_list_directories = True # irrelevant if serve_files == False
 		self.serve_robots_txt = True
 		self.rpc_hmac_key = None
 		self.basic_auth = None
