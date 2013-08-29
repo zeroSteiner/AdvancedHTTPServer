@@ -65,7 +65,6 @@ import ssl
 import sys
 import hmac
 import json
-import pickle
 import shutil
 import hashlib
 import httplib
@@ -86,7 +85,6 @@ except ImportError:
     from StringIO import StringIO
 
 SERIALIZER_DRIVERS = {}
-SERIALIZER_DRIVERS['binary/python-pickle'] = {'loads':pickle.loads, 'dumps':pickle.dumps}
 SERIALIZER_DRIVERS['binary/json'] = {'loads':json.loads, 'dumps':json.dumps}
 
 try:
@@ -184,18 +182,20 @@ class AdvancedHTTPServerRPCClient(object):
 			self.client = httplib.HTTPSConnection(self.host, self.port)
 		else:
 			self.client = httplib.HTTPConnection(self.host, self.port)
+		self.serializer_name = SERIALIZER_DRIVERS.keys()[-1]
+		self.serializer = SERIALIZER_DRIVERS[self.serializer_name]
 
 	def encode(self,data):
-		return pickle.dumps(data)
+		return self.serializer['dumps'](data)
 
 	def decode(self,data):
-		return pickle.loads(data)
+		return self.serializer['loads'](data)
 
 	def call(self, meth, *options):
 		options = self.encode(options)
 
 		headers = {}
-		headers['Content-Type'] = 'binary/python-pickle'
+		headers['Content-Type'] = self.serializer_name
 		headers['Content-Length'] = str(len(options))
 
 		if self.hmac_key != None:
