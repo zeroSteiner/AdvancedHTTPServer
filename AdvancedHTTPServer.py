@@ -55,7 +55,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.1'
+__version__ = '0.2'
 __all__ = [ 'AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError' ]
 
 import os
@@ -73,16 +73,16 @@ import logging.handlers
 import mimetypes
 import posixpath
 
+from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 from SocketServer import ThreadingMixIn
 from urlparse import urlparse, parse_qs
 from urllib import unquote as url_unquote
 from urllib import quote as url_quote
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
 
 try:
-    from cStringIO import StringIO
+	from cStringIO import StringIO
 except ImportError:
-    from StringIO import StringIO
+	from StringIO import StringIO
 
 SERIALIZER_DRIVERS = {}
 SERIALIZER_DRIVERS['binary/json'] = {'loads':json.loads, 'dumps':json.dumps}
@@ -132,10 +132,14 @@ class SectionConfigParser:
 	def items(self):
 		return self.config_parser.items(self.section_name)
 
-def get_server_from_config(config, section_name):
+def build_server_from_config(config, section_name, ServerClass = None, HandlerClass = None):
+	ServerClass = (ServerClass or AdvancedHTTPServer)
+	HandlerClass = (HandlerClass or AdvancedHTTPServerRequestHandler)
 	config = SectionConfigParser(section_name, config)
 	port = config.getint('port')
-	web_root = config.get('web_root')
+	web_root = None
+	if config.has_option('web_root'):
+		web_root = config.get('web_root')
 
 	ip = config.get('ip', '0.0.0.0')
 	use_ssl = config.getboolean('use_ssl', False)
@@ -148,11 +152,14 @@ def get_server_from_config(config, section_name):
 		password = config.get('password')
 		password_type = config.get('password_type', 'md5')
 
-	server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (ip, port), use_ssl = use_ssl, ssl_certfile = ssl_certfile)
+	server = ServerClass(HandlerClass, address = (ip, port), use_ssl = use_ssl, ssl_certfile = ssl_certfile)
 	if password:
 		server.auth_add_creds('', password, pwtype = password_type)
-	server.serve_files = True
-	server.serve_files_root = web_root
+	if web_root == None:
+		server.serve_files = False
+	else:
+		server.serve_files = True
+		server.serve_files_root = web_root
 	return server
 
 class AdvancedHTTPServerRPCError(Exception):
@@ -261,6 +268,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 	def __init__(self, *args, **kwargs):
 		self.handler_map = {}
 		self.rpc_handler_map = {}
+		self.server = args[2]
 		self.install_handlers()
 		BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
@@ -722,7 +730,7 @@ def main():
 		if arguments.config:
 			config = ConfigParser.ConfigParser()
 			config.readfp(arguments.config)
-			server = get_server_from_config(config, 'server')
+			server = build_server_from_config(config, 'server')
 			web_root = server.serve_files_root
 		else:
 			server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (arguments.ip, arguments.port))
