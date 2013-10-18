@@ -192,6 +192,9 @@ class AdvancedHTTPServerRPCClient(object):
 		self.serializer_name = SERIALIZER_DRIVERS.keys()[-1]
 		self.serializer = SERIALIZER_DRIVERS[self.serializer_name]
 
+	def __call__(self, *args, **kwargs):
+		return self.call(*args, **kwargs)
+
 	def encode(self,data):
 		return self.serializer['dumps'](data)
 
