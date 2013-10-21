@@ -65,6 +65,7 @@ import ssl
 import sys
 import hmac
 import json
+import Cookie
 import shutil
 import hashlib
 import httplib
@@ -324,13 +325,14 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 
 		if self.path == 'robots.txt' and self.server.serve_robots_txt:
 			self.send_response(200)
-			self.send_header('Content-type', 'text/plain')
+			self.send_header('Content-Type', 'text/plain')
 			self.end_headers()
 			self.wfile.write(self.server.robots_txt)
 			return
 
 		for (path_regex, handler) in self.handler_map.items():
 			if re.match(path_regex, self.path):
+				self.cookies = Cookie.SimpleCookie(self.headers.get('cookie', ''))
 				handler(query)
 				return
 
