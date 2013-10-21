@@ -154,7 +154,8 @@ def build_server_from_config(config, section_name, ServerClass = None, HandlerCl
 
 	server = ServerClass(HandlerClass, address = (ip, port), use_ssl = use_ssl, ssl_certfile = ssl_certfile)
 	if password:
-		server.auth_add_creds('', password, pwtype = password_type)
+		username = config.get('username', '')
+		server.auth_add_creds(username, password, pwtype = password_type)
 	if web_root == None:
 		server.serve_files = False
 	else:
