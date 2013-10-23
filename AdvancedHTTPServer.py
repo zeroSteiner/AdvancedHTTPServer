@@ -283,6 +283,26 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 	def install_handlers(self):
 		pass # over ride me
 
+	def respond_file(self, file_path, attachment = False):
+		file_path = os.path.abspath(file_path)
+		try:
+			file_obj = open(file_path, 'rb')
+		except IOError:
+			self.respond_not_found()
+			return None
+		self.send_response(200)
+		self.send_header('Content-Type', self.guess_mime_type(file_path))
+		fs = os.fstat(file_obj.fileno())
+		self.send_header('Content-Length', str(fs[6]))
+		if attachment:
+			file_name = os.path.basename(file_path)
+			self.send_header('Content-Disposition', 'attachment; filename=' + file_name)
+		self.send_header('Last-Modified', self.date_time_string(fs.st_mtime))
+		self.end_headers()
+		shutil.copyfileobj(file_obj, self.wfile)
+		file_obj.close()
+		return
+
 	def respond_not_found(self):
 		self.send_response(404, 'Resource Not Found')
 		self.send_header('Content-Type', 'text/html')
@@ -342,7 +362,10 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 
 		file_path = self.server.serve_files_root
 		file_path = os.path.join(file_path, tmp_path)
-		if os.path.isdir(file_path) and self.server.serve_files_list_directories:
+		if os.path.isfile(file_path):
+			self.respond_file(file_path)
+			return
+		elif os.path.isdir(file_path) and self.server.serve_files_list_directories:
 			if not self.original_path.endswith('/'):
 				# redirect browser - doing basically what apache does
 				self.send_response(301)
@@ -389,22 +412,6 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 				shutil.copyfileobj(f, self.wfile)
 				f.close()
 				return
-
-		elif os.path.isfile(file_path):
-			try:
-				file_obj = open(file_path, 'rb')
-			except IOError:
-				self.respond_not_found()
-				return None
-			self.send_response(200)
-			self.send_header('Content-Type', self.guess_mime_type(file_path))
-			fs = os.fstat(file_obj.fileno())
-			self.send_header('Content-Length', str(fs[6]))
-			self.send_header('Last-Modified', self.date_time_string(fs.st_mtime))
-			self.end_headers()
-			shutil.copyfileobj(file_obj, self.wfile)
-			file_obj.close()
-			return
 
 		self.respond_not_found()
 		return
