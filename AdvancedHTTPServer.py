@@ -203,7 +203,7 @@ class AdvancedHTTPServerRPCClient(object):
 	def decode(self,data):
 		return self.serializer['loads'](data)
 
-	def call(self, meth, *options):
+	def call(self, method, *options):
 		options = self.encode(options)
 
 		headers = {}
@@ -218,7 +218,8 @@ class AdvancedHTTPServerRPCClient(object):
 		if self.username != None and self.password != None:
 			headers['Authorization'] = 'Basic ' + (self.username + ':' + self.password).encode('base64')
 
-		self.client.request("RPC", self.uri_base + meth, options, headers)
+		method = os.path.join(self.uri_base, method)
+		self.client.request("RPC", method, options, headers)
 		resp = self.client.getresponse()
 		if resp.status != 200:
 			raise AdvancedHTTPServerRPCError(resp.reason, resp.status)
