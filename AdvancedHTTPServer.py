@@ -215,7 +215,7 @@ class AdvancedHTTPServerRPCClient(object):
 			headers['HMAC'] = hmac_calculator.hexdigest()
 
 		if self.username != None and self.password != None:
-			headers['Authorization'] = 'Basic ' + (self.username + ':' + self.password).encode('base64')
+			headers['Authorization'] = 'Basic ' + (self.username + ':' + self.password).encode('base64').strip()
 
 		method = os.path.join(self.uri_base, method)
 		self.client.request("RPC", method, options, headers)
