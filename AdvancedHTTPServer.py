@@ -143,9 +143,8 @@ def build_server_from_config(config, section_name, ServerClass = None, HandlerCl
 		web_root = config.get('web_root')
 
 	ip = config.get('ip', '0.0.0.0')
-	use_ssl = config.getboolean('use_ssl', False)
 	ssl_certfile = None
-	if use_ssl:
+	if config.has_option('ssl_cert'):
 		ssl_certfile = config.get('ssl_cert')
 
 	password = None
@@ -153,7 +152,7 @@ def build_server_from_config(config, section_name, ServerClass = None, HandlerCl
 		password = config.get('password')
 		password_type = config.get('password_type', 'md5')
 
-	server = ServerClass(HandlerClass, address = (ip, port), use_ssl = use_ssl, ssl_certfile = ssl_certfile)
+	server = ServerClass(HandlerClass, address = (ip, port), ssl_certfile = ssl_certfile)
 	if password:
 		username = config.get('username', '')
 		server.auth_add_creds(username, password, pwtype = password_type)
@@ -597,9 +596,10 @@ class AdvancedHTTPServer(object):
 		rpc_hmac_key (string)
 		server_version (string)
 	"""
-	def __init__(self, request_handler, address = None, use_threads = True, use_ssl = False, ssl_certfile = None):
+	def __init__(self, request_handler, address = None, use_threads = True, ssl_certfile = None):
+		self.use_ssl = bool(ssl_certfile)
 		if address == None:
-			if use_ssl:
+			if self.use_ssl:
 				if os.getuid():
 					address = ('0.0.0.0', 8443)
 				else:
@@ -610,7 +610,6 @@ class AdvancedHTTPServer(object):
 				else:
 					address = ('0.0.0.0', 80)
 		self.address = address
-		self.use_ssl = use_ssl
 		self.ssl_certfile = ssl_certfile
 		self.logger = logging.getLogger('AdvancedHTTPServer')
 
@@ -620,7 +619,7 @@ class AdvancedHTTPServer(object):
 			self.http_server = AdvancedHTTPServerNonThreaded(address, request_handler)
 		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
 
-		if use_ssl:
+		if self.use_ssl:
 			self.http_server.socket = ssl.wrap_socket(self.http_server.socket, certfile = ssl_certfile, server_side = True)
 			self.http_server.using_ssl = True
 			self.logger.info(address[0] + ':' + str(address[1]) + ' - ssl has been enabled')
