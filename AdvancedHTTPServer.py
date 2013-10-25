@@ -624,17 +624,14 @@ class AdvancedHTTPServer(object):
 			self.http_server.using_ssl = True
 			self.logger.info(address[0] + ':' + str(address[1]) + ' - ssl has been enabled')
 
-	def fork_and_serve_forever(self):
-		if not hasattr(os, 'fork'):
-			raise Exception('os.fork is not available')
-		child_pid = os.fork()
-		if child_pid == 0:
-			self.serve_forever()
-		else:
-			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - forked child process: ' + str(child_pid))
-		return child_pid
-
-	def serve_forever(self):
+	def serve_forever(self, fork = False):
+		if fork:
+			if not hasattr(os, 'fork'):
+				raise Exception('os.fork is not available')
+			child_pid = os.fork()
+			if child_pid != 0:
+				self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - forked child process: ' + str(child_pid))
+				return child_pid
 		self.http_server.serve_forever()
 
 	@property
