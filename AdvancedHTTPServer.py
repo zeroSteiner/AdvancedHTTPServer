@@ -275,6 +275,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 		self.rpc_handler_map = {}
 		self.server = args[2]
 		self.install_handlers()
+		self.basic_auth_user = None
 		BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
 	def version_string(self):
@@ -457,12 +458,15 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
 
 			if password_data['type'] == 'plain':
 				if password == password_data['value']:
+					self.basic_auth_user = username
 					return True
 			elif password_data['type'] == 'md5':
 				if hashlib.new('md5', password).hexdigest() == password_data['value']:
+					self.basic_auth_user = username
 					return True
 			elif password_data['type'] == 'sha1':
 				if hashlib.new('sha1', password).hexdigest() == password_data['value']:
+					self.basic_auth_user = username
 					return True
 			self.server.logger.warning('received invalid password from user: ' + username)
 			return False
