@@ -258,7 +258,7 @@ class AdvancedHTTPServerNonThreaded(HTTPServer):
 class AdvancedHTTPServerThreaded(ThreadingMixIn, AdvancedHTTPServerNonThreaded):
 	pass
 
-class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler):
+class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 	if not mimetypes.inited:
 		mimetypes.init() # try to read system mime.types
 	extensions_map = mimetypes.types_map.copy()
@@ -700,6 +700,13 @@ class AdvancedHTTPServer(object):
 		else:
 			self.http_server.basic_auth = {}
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
+
+	def auth_delete_creds(self, username = None):
+		if not username:
+			self.http_server.basic_auth = {}
+			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication database has been cleared of all entries')
+			return
+		del self.http_server.basic_auth[username]
 
 	def auth_add_creds(self, username, password, pwtype = 'plain'):
 		pwtype = pwtype.lower()
