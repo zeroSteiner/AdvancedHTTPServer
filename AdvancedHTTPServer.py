@@ -451,6 +451,8 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 			auth_info = auth_info[1].decode('base64')
 			username = auth_info.split(':')[0]
 			password = ':'.join(auth_info.split(':')[1:])
+			if hasattr(self, 'custom_authentication'):
+				return self.custom_authentication(username, password)
 			if not username in self.server.basic_auth:
 				self.server.logger.warning('received invalid username: ' + username)
 				return False
@@ -600,7 +602,7 @@ class AdvancedHTTPServer(object):
 		rpc_hmac_key (string)
 		server_version (string)
 	"""
-	def __init__(self, request_handler, address = None, use_threads = True, ssl_certfile = None):
+	def __init__(self, RequestHandler, address = None, use_threads = True, ssl_certfile = None):
 		self.use_ssl = bool(ssl_certfile)
 		if address == None:
 			if self.use_ssl:
@@ -618,15 +620,18 @@ class AdvancedHTTPServer(object):
 		self.logger = logging.getLogger('AdvancedHTTPServer')
 
 		if use_threads:
-			self.http_server = AdvancedHTTPServerThreaded(address, request_handler)
+			self.http_server = AdvancedHTTPServerThreaded(address, RequestHandler)
 		else:
-			self.http_server = AdvancedHTTPServerNonThreaded(address, request_handler)
+			self.http_server = AdvancedHTTPServerNonThreaded(address, RequestHandler)
 		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
 
 		if self.use_ssl:
 			self.http_server.socket = ssl.wrap_socket(self.http_server.socket, certfile = ssl_certfile, server_side = True)
 			self.http_server.using_ssl = True
 			self.logger.info(address[0] + ':' + str(address[1]) + ' - ssl has been enabled')
+
+		if hasattr(RequestHandler, 'custom_authentication'):
+			self.auth_set(True)
 
 	def serve_forever(self, fork = False):
 		if fork:
