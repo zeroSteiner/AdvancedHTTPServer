@@ -65,6 +65,7 @@ import ssl
 import sys
 import hmac
 import json
+import zlib
 import Cookie
 import shutil
 import hashlib
@@ -87,10 +88,12 @@ except ImportError:
 
 SERIALIZER_DRIVERS = {}
 SERIALIZER_DRIVERS['binary/json'] = {'loads':json.loads, 'dumps':json.dumps}
+SERIALIZER_DRIVERS['binary/json+zlib'] = {'loads':lambda d: json.loads(zlib.decompress(d)), 'dumps':lambda d: zlib.compress(json.dumps(d))}
 
 try:
 	import msgpack
 	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads':msgpack.loads, 'dumps':msgpack.dumps}
+	SERIALIZER_DRIVERS['binary/message-pack+zlib'] = {'loads':lambda d: msgpack.loads(zlib.decompress(d)), 'dumps':lambda d: zlib.compress(msgpack.dumps(d))}
 except ImportError:
 	pass
 
@@ -193,6 +196,10 @@ class AdvancedHTTPServerRPCClient(object):
 		self.serializer_name = SERIALIZER_DRIVERS.keys()[-1]
 		self.serializer = SERIALIZER_DRIVERS[self.serializer_name]
 
+	def set_serializer(self, serializer_name):
+		self.serializer = SERIALIZER_DRIVERS[serializer_name]
+		self.serializer_name = serializer_name
+
 	def __call__(self, *args, **kwargs):
 		return self.call(*args, **kwargs)
 
@@ -284,7 +291,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 	def install_handlers(self):
 		pass # over ride me
 
-	def respond_file(self, file_path, attachment = False):
+	def respond_file(self, file_path, attachment = False, query = {}):
 		file_path = os.path.abspath(file_path)
 		try:
 			file_obj = open(file_path, 'rb')
@@ -351,9 +358,9 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 			self.wfile.write(self.server.robots_txt)
 			return
 
+		self.cookies = Cookie.SimpleCookie(self.headers.get('cookie', ''))
 		for (path_regex, handler) in self.handler_map.items():
 			if re.match(path_regex, self.path):
-				self.cookies = Cookie.SimpleCookie(self.headers.get('cookie', ''))
 				handler(query)
 				return
 
@@ -364,7 +371,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 		file_path = self.server.serve_files_root
 		file_path = os.path.join(file_path, tmp_path)
 		if os.path.isfile(file_path):
-			self.respond_file(file_path)
+			self.respond_file(file_path, query = query)
 			return
 		elif os.path.isdir(file_path) and self.server.serve_files_list_directories:
 			if not self.original_path.endswith('/'):
@@ -452,7 +459,10 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 			username = auth_info.split(':')[0]
 			password = ':'.join(auth_info.split(':')[1:])
 			if hasattr(self, 'custom_authentication'):
-				return self.custom_authentication(username, password)
+				if self.custom_authentication(username, password):
+					self.basic_auth_user = username
+					return True
+				return False
 			if not username in self.server.basic_auth:
 				self.server.logger.warning('received invalid username: ' + username)
 				return False
