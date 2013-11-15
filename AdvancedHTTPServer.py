@@ -72,6 +72,7 @@ import hashlib
 import httplib
 import logging
 import logging.handlers
+import sqlite3
 import mimetypes
 import posixpath
 
@@ -246,6 +247,37 @@ class AdvancedHTTPServerRPCClient(object):
 		if resp_data['exception_occurred']:
 			raise AdvancedHTTPServerRPCError('remote method incured an exception', resp.status, remote_exception = resp_data['exception'])
 		return resp_data['result']
+
+class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
+	def __init__(self, *args, **kwargs):
+		super(self.__class__, self).__init__(*args, **kwargs)
+		self.cache_db = sqlite3.connect(':memory:', check_same_thread = False)
+		cursor = self.cache_db.cursor()
+		cursor.execute('CREATE TABLE cache (method TEXT NOT NULL, options_hash TEXT NOT NULL, return_value TEXT NOT NULL)')
+		self.cache_db.commit()
+
+	def cache_call(self, method, *options):
+		options_hash = hashlib.new('sha1', self.encode(options)).hexdigest()
+		cursor = self.cache_db.cursor()
+
+		cursor.execute('SELECT return_value FROM cache WHERE method = ? AND options_hash = ?', (method, options_hash))
+		return_value = cursor.fetchone()
+		if return_value:
+			return_value = json.loads(return_value[0])
+		else:
+			return_value = self.call(method, *options)
+			cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, json.dumps(return_value)))
+			self.cache_db.commit()
+		return return_value
+
+	def cache_call_refresh(self, method, *options):
+		options_hash = hashlib.new('sha1', self.encode(options)).hexdigest()
+		cursor = self.cache_db.cursor()
+		cursor.execute('DELETE FROM cache WHERE method = ? AND options_hash = ?', (method, options_hash))
+		return_value = self.call(method, *options)
+		cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, json.dumps(return_value)))
+		self.cache_db.commit()
+		return return_value
 
 class AdvancedHTTPServerNonThreaded(HTTPServer):
 	def __init__(self, *args, **kwargs):
