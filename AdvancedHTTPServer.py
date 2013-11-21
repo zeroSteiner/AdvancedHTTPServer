@@ -250,7 +250,7 @@ class AdvancedHTTPServerRPCClient(object):
 
 class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 	def __init__(self, *args, **kwargs):
-		super(self.__class__, self).__init__(*args, **kwargs)
+		super(AdvancedHTTPServerRPCClientCached, self).__init__(*args, **kwargs)
 		self.cache_db = sqlite3.connect(':memory:', check_same_thread = False)
 		cursor = self.cache_db.cursor()
 		cursor.execute('CREATE TABLE cache (method TEXT NOT NULL, options_hash TEXT NOT NULL, return_value TEXT NOT NULL)')
