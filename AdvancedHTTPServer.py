@@ -684,6 +684,10 @@ class AdvancedHTTPServer(object):
 				self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - forked child process: ' + str(child_pid))
 				return child_pid
 		self.http_server.serve_forever()
+		return 0
+
+	def shutdown(self):
+		self.http_server.shutdown()
 
 	@property
 	def serve_files(self):
