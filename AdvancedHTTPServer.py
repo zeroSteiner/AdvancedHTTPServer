@@ -307,7 +307,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 		'.rb': 'text/plain',
 		'.c':  'text/plain',
 		'.h':  'text/plain',
-		})
+	})
 
 	def __init__(self, *args, **kwargs):
 		self.handler_map = {}
@@ -407,7 +407,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 			return
 		elif os.path.isdir(file_path) and self.server.serve_files_list_directories:
 			if not self.original_path.endswith('/'):
-				# redirect browser - doing basically what apache does
+				# redirect browser, doing what apache does
 				self.send_response(301)
 				self.send_header('Location', self.path + '/')
 				self.end_headers()
@@ -415,43 +415,42 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 			for index in ['index.html', 'index.htm']:
 				index = os.path.join(file_path, index)
 				if os.path.exists(index):
-					file_path = index
-					break
-			else:
-				try:
-					dir_contents = os.listdir(file_path)
-				except os.error:
-					self.respond_not_found()
-					return None
-				dir_contents.sort(key=lambda a: a.lower())
-				f = StringIO()
-				displaypath = cgi.escape(url_unquote(self.path))
-				f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
-				f.write('<html>\n<title>Directory listing for ' + displaypath + '</title>\n')
-				f.write('<body>\n<h2>Directory listing for ' + displaypath + '</h2>\n')
-				f.write('<hr>\n<ul>\n')
-				for name in dir_contents:
-					fullname = os.path.join(file_path, name)
-					displayname = linkname = name
-					# Append / for directories or @ for symbolic links
-					if os.path.isdir(fullname):
-						displayname = name + "/"
-						linkname = name + "/"
-					if os.path.islink(fullname):
-						displayname = name + "@"
-						# Note: a link to a directory displays with @ and links with /
-					f.write('<li><a href="' + url_quote(linkname) + '">' + cgi.escape(displayname) + '</a>\n')
-				f.write('</ul>\n<hr>\n</body>\n</html>\n')
-				length = f.tell()
-				f.seek(0)
-				self.send_response(200)
-				encoding = sys.getfilesystemencoding()
-				self.send_header('Content-Type', 'text/html; charset=' + encoding)
-				self.send_header('Content-Length', str(length))
-				self.end_headers()
-				shutil.copyfileobj(f, self.wfile)
-				f.close()
-				return
+					self.respond_file(index, query = query)
+					return
+			try:
+				dir_contents = os.listdir(file_path)
+			except os.error:
+				self.respond_not_found()
+				return None
+			dir_contents.sort(key=lambda a: a.lower())
+			f = StringIO()
+			displaypath = cgi.escape(url_unquote(self.path))
+			f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
+			f.write('<html>\n<title>Directory listing for ' + displaypath + '</title>\n')
+			f.write('<body>\n<h2>Directory listing for ' + displaypath + '</h2>\n')
+			f.write('<hr>\n<ul>\n')
+			for name in dir_contents:
+				fullname = os.path.join(file_path, name)
+				displayname = linkname = name
+				# Append / for directories or @ for symbolic links
+				if os.path.isdir(fullname):
+					displayname = name + "/"
+					linkname = name + "/"
+				if os.path.islink(fullname):
+					displayname = name + "@"
+					# Note: a link to a directory displays with @ and links with /
+				f.write('<li><a href="' + url_quote(linkname) + '">' + cgi.escape(displayname) + '</a>\n')
+			f.write('</ul>\n<hr>\n</body>\n</html>\n')
+			length = f.tell()
+			f.seek(0)
+			self.send_response(200)
+			encoding = sys.getfilesystemencoding()
+			self.send_header('Content-Type', 'text/html; charset=' + encoding)
+			self.send_header('Content-Length', str(length))
+			self.end_headers()
+			shutil.copyfileobj(f, self.wfile)
+			f.close()
+			return
 
 		self.respond_not_found()
 		return
