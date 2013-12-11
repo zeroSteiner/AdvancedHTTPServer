@@ -55,7 +55,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.46'
+__version__ = '0.2.47'
 __all__ = [ 'AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError' ]
 
 import os
@@ -598,14 +598,19 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 			self.send_error(400, 'Invalid Data')
 			return
 
-		if not self.path in self.rpc_handler_map:
+		rpc_handler = None
+		for (path_regex, handler) in self.rpc_handler_map.items():
+			if re.match(path_regex, self.path):
+				rpc_handler = handler
+				break
+		if not rpc_handler:
 			self.send_error(501, 'Method Not Implemented')
 			return
 
 		self.server.logger.info('running RPC method: ' + self.path)
 		response = { 'result':None, 'exception_occurred':False }
 		try:
-			result = self.rpc_handler_map[self.path](*data)
+			result = rpc_handler(*data)
 			response['result'] = result
 		except Exception as error:
 			response['exception_occurred'] = True
