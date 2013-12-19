@@ -36,7 +36,7 @@
 """
 # The AdvancedHTTPServer systemd service unit file
 #
-# Quick HowTo:
+# Quick How To:
 # 1. Copy this file to /etc/systemd/system/pyhttpd.service
 # 2. Edit <USER> and run parameters appropriately in the ExecStart option
 # 3. Set configuration settings in /etc/pyhttpd.conf
@@ -55,32 +55,30 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.47'
-__all__ = [ 'AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError' ]
+__version__ = '0.2.48'
+__all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
-import os
-import re
+import BaseHTTPServer
 import cgi
-import ssl
-import sys
-import hmac
-import json
-import zlib
 import Cookie
-import shutil
 import hashlib
+import hmac
 import httplib
+import json
 import logging
 import logging.handlers
-import sqlite3
 import mimetypes
+import os
 import posixpath
-
-from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
-from SocketServer import ThreadingMixIn
-from urlparse import urlparse, parse_qs
-from urllib import unquote as url_unquote
-from urllib import quote as url_quote
+import re
+import shutil
+import SocketServer
+import sqlite3
+import ssl
+import sys
+import urllib
+import urlparse
+import zlib
 
 try:
 	from cStringIO import StringIO
@@ -93,15 +91,16 @@ SERIALIZER_DRIVERS['binary/json+zlib'] = {'loads':lambda d: json.loads(zlib.deco
 
 try:
 	import msgpack
-	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads':msgpack.loads, 'dumps':msgpack.dumps}
-	SERIALIZER_DRIVERS['binary/message-pack+zlib'] = {'loads':lambda d: msgpack.loads(zlib.decompress(d)), 'dumps':lambda d: zlib.compress(msgpack.dumps(d))}
 except ImportError:
 	pass
+else:
+	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads':msgpack.loads, 'dumps':msgpack.dumps}
+	SERIALIZER_DRIVERS['binary/message-pack+zlib'] = {'loads':lambda d: msgpack.loads(zlib.decompress(d)), 'dumps':lambda d: zlib.compress(msgpack.dumps(d))}
 
 if hasattr(logging, 'NullHandler'):
 	logging.getLogger('AdvancedHTTPServer').addHandler(logging.NullHandler())
 
-class SectionConfigParser:
+class SectionConfigParser(object):
 	__version__ = '0.1'
 	def __init__(self, section_name, config_parser):
 		self.section_name = section_name
@@ -283,7 +282,7 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		self.cache_db.commit()
 		return return_value
 
-class AdvancedHTTPServerNonThreaded(HTTPServer):
+class AdvancedHTTPServerNonThreaded(BaseHTTPServer.HTTPServer, object):
 	def __init__(self, *args, **kwargs):
 		self.logger = logging.getLogger('AdvancedHTTPServer')
 		self.allow_reuse_address = True
@@ -296,12 +295,12 @@ class AdvancedHTTPServerNonThreaded(HTTPServer):
 		self.basic_auth = None
 		self.robots_txt = 'User-agent: *\nDisallow: /\n'
 		self.server_version = 'HTTPServer/' + __version__
-		HTTPServer.__init__(self, *args, **kwargs)
+		super(AdvancedHTTPServerNonThreaded, self).__init__(*args, **kwargs)
 
-class AdvancedHTTPServerThreaded(ThreadingMixIn, AdvancedHTTPServerNonThreaded):
+class AdvancedHTTPServerThreaded(SocketServer.ThreadingMixIn, AdvancedHTTPServerNonThreaded):
 	pass
 
-class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
+class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, object):
 	if not mimetypes.inited:
 		mimetypes.init() # try to read system mime.types
 	extensions_map = mimetypes.types_map.copy()
@@ -319,7 +318,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 		self.server = args[2]
 		self.install_handlers()
 		self.basic_auth_user = None
-		BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
+		super(AdvancedHTTPServerRequestHandler, self).__init__(*args, **kwargs)
 
 	def version_string(self):
 		return self.server.server_version
@@ -374,7 +373,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 		# abandon query parameters
 		self.path = self.path.split('?', 1)[0]
 		self.path = self.path.split('#', 1)[0]
-		self.original_path = url_unquote(self.path)
+		self.original_path = urllib.unquote(self.path)
 		self.path = posixpath.normpath(self.original_path)
 		words = self.path.split('/')
 		words = filter(None, words)
@@ -428,7 +427,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 				return None
 			dir_contents.sort(key=lambda a: a.lower())
 			f = StringIO()
-			displaypath = cgi.escape(url_unquote(self.path))
+			displaypath = cgi.escape(urllib.unquote(self.path))
 			f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
 			f.write('<html>\n<title>Directory listing for ' + displaypath + '</title>\n')
 			f.write('<body>\n<h2>Directory listing for ' + displaypath + '</h2>\n')
@@ -443,7 +442,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 				if os.path.islink(fullname):
 					displayname = name + "@"
 					# Note: a link to a directory displays with @ and links with /
-				f.write('<li><a href="' + url_quote(linkname) + '">' + cgi.escape(displayname) + '</a>\n')
+				f.write('<li><a href="' + urllib.quote(linkname) + '">' + cgi.escape(displayname) + '</a>\n')
 			f.write('</ul>\n<hr>\n</body>\n</html>\n')
 			length = f.tell()
 			f.seek(0)
@@ -524,9 +523,9 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 		if not self.check_authorization():
 			self.respond_unauthorized(request_authentication = True)
 			return
-		uri = urlparse(self.path)
+		uri = urlparse.urlparse(self.path)
 		self.path = uri.path
-		query = parse_qs(uri.query)
+		query = urlparse.parse_qs(uri.query)
 
 		self.dispatch_handler(query)
 		return
@@ -537,7 +536,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPRequestHandler, object):
 			return
 		content_length = int(self.headers.getheader('content-length') or 0)
 		data = self.rfile.read(content_length)
-		query = parse_qs(data, keep_blank_values = 1)
+		query = urlparse.parse_qs(data, keep_blank_values = 1)
 
 		self.dispatch_handler(query)
 		return
