@@ -55,7 +55,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.48'
+__version__ = '0.2.49'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -76,6 +76,7 @@ import SocketServer
 import sqlite3
 import ssl
 import sys
+import threading
 import urllib
 import urlparse
 import zlib
@@ -195,6 +196,7 @@ class AdvancedHTTPServerRPCClient(object):
 			self.client = httplib.HTTPConnection(self.host, self.port)
 		self.serializer_name = SERIALIZER_DRIVERS.keys()[-1]
 		self.serializer = SERIALIZER_DRIVERS[self.serializer_name]
+		self.lock = threading.RLock()
 
 	def __reduce__(self):
 		address = (self.host, self.port)
@@ -229,8 +231,9 @@ class AdvancedHTTPServerRPCClient(object):
 			headers['Authorization'] = 'Basic ' + (self.username + ':' + self.password).encode('base64').strip()
 
 		method = os.path.join(self.uri_base, method)
-		self.client.request("RPC", method, options, headers)
-		resp = self.client.getresponse()
+		with self.lock:
+			self.client.request("RPC", method, options, headers)
+			resp = self.client.getresponse()
 		if resp.status != 200:
 			raise AdvancedHTTPServerRPCError(resp.reason, resp.status)
 
