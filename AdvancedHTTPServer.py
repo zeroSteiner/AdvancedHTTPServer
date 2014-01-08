@@ -55,7 +55,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.49'
+__version__ = '0.2.50'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -184,6 +184,7 @@ class AdvancedHTTPServerRPCClient(object):
 	def __init__(self, address, use_ssl = False, username = None, password = None, uri_base = '/', hmac_key = None):
 		self.host = address[0]
 		self.port = address[1]
+		self.logger = logging.getLogger('AdvancedHTTPServerRPCClient')
 
 		self.use_ssl = use_ssl
 		self.uri_base = uri_base
@@ -231,6 +232,7 @@ class AdvancedHTTPServerRPCClient(object):
 			headers['Authorization'] = 'Basic ' + (self.username + ':' + self.password).encode('base64').strip()
 
 		method = os.path.join(self.uri_base, method)
+		self.logger.debug('calling RPC method: ' + method[1:])
 		with self.lock:
 			self.client.request("RPC", method, options, headers)
 			resp = self.client.getresponse()
@@ -284,6 +286,13 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, json.dumps(return_value)))
 		self.cache_db.commit()
 		return return_value
+
+	def cache_clear(self):
+		cursor = self.cache_db.cursor()
+		cursor.execute('DELETE FROM cache')
+		self.cache_db.commit()
+		self.logger.info('the RPC cache has been clared')
+		return
 
 class AdvancedHTTPServerNonThreaded(BaseHTTPServer.HTTPServer, object):
 	def __init__(self, *args, **kwargs):
