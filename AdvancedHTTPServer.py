@@ -55,7 +55,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.50'
+__version__ = '0.2.51'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -537,9 +537,9 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			return
 		uri = urlparse.urlparse(self.path)
 		self.path = uri.path
-		query = urlparse.parse_qs(uri.query)
+		self.query_data = urlparse.parse_qs(uri.query)
 
-		self.dispatch_handler(query)
+		self.dispatch_handler(self.query_data)
 		return
 
 	def do_POST(self):
@@ -548,9 +548,9 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			return
 		content_length = int(self.headers.getheader('content-length') or 0)
 		data = self.rfile.read(content_length)
-		query = urlparse.parse_qs(data, keep_blank_values = 1)
+		self.query_data = urlparse.parse_qs(data, keep_blank_values = 1)
 
-		self.dispatch_handler(query)
+		self.dispatch_handler(self.query_data)
 		return
 
 	def do_OPTIONS(self):
