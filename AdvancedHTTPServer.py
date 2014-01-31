@@ -55,8 +55,8 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.52'
-__all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
+__version__ = '0.2.53'
+__all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
 import cgi
@@ -86,6 +86,7 @@ try:
 except ImportError:
 	from StringIO import StringIO
 
+GLOBAL_HANDLER_MAP = {}
 SERIALIZER_DRIVERS = {}
 SERIALIZER_DRIVERS['binary/json'] = {'loads':json.loads, 'dumps':json.dumps}
 SERIALIZER_DRIVERS['binary/json+zlib'] = {'loads':lambda d: json.loads(zlib.decompress(d)), 'dumps':lambda d: zlib.compress(json.dumps(d))}
@@ -166,6 +167,24 @@ def build_server_from_config(config, section_name, ServerClass = None, HandlerCl
 		server.serve_files = True
 		server.serve_files_root = web_root
 	return server
+
+class AdvancedHTTPServerRegisterPath(object):
+	def __init__(self, path, handler = None):
+		self.path = path
+		if handler == None or isinstance(handler, (str, unicode)):
+			self.handler = handler
+		elif hasattr(handler, '__name__'):
+			self.handler = handler.__name__
+		elif hasattr(handler, '__class__'):
+			self.handler = handler.__class__.__name__
+		else:
+			raise ValueError('unknown handler: ' + repr(handler))
+
+	def __call__(self, function):
+		handler_map = GLOBAL_HANDLER_MAP.get(self.handler, {})
+		handler_map[self.path] = function
+		GLOBAL_HANDLER_MAP[self.handler] = handler_map
+		return function
 
 class AdvancedHTTPServerRPCError(Exception):
 	def __init__(self, message, status, remote_exception = None):
@@ -328,7 +347,13 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.handler_map = {}
 		self.rpc_handler_map = {}
 		self.server = args[2]
+
+		for map_name in (None, self.__class__.__name__):
+			handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
+			for path, function in handler_map.items():
+				self.handler_map[path] = function
 		self.install_handlers()
+
 		self.basic_auth_user = None
 		super(AdvancedHTTPServerRequestHandler, self).__init__(*args, **kwargs)
 
@@ -408,7 +433,10 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.cookies = Cookie.SimpleCookie(self.headers.get('cookie', ''))
 		for (path_regex, handler) in self.handler_map.items():
 			if re.match(path_regex, self.path):
-				handler(query)
+				if hasattr(self, handler.__name__) and handler == getattr(self, handler.__name__).__func__:
+					getattr(self, handler.__name__)(query)
+				else:
+					handler(self, query)
 				return
 
 		if not self.server.serve_files:
