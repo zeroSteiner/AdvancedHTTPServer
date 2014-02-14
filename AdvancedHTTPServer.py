@@ -55,7 +55,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.53'
+__version__ = '0.2.54'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -498,6 +498,12 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.respond_not_found()
 		return
 
+	def end_headers(self):
+		super(AdvancedHTTPServerRequestHandler, self).end_headers()
+		if self.command == 'HEAD':
+			self.wfile.close()
+			self.wfile = open(os.devnull, 'wb')
+
 	def guess_mime_type(self, path):
 		base, ext = posixpath.splitext(path)
 		if ext in self.extensions_map:
@@ -570,6 +576,9 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.dispatch_handler(self.query_data)
 		return
 
+	def do_HEAD(self):
+		self.do_GET()
+
 	def do_POST(self):
 		if not self.check_authorization():
 			self.respond_unauthorized(request_authentication = True)
@@ -586,7 +595,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		if 'RPC' in available_methods and len(self.rpc_handler_map) == 0:
 			available_methods.remove('RPC')
 		self.send_response(200)
-		self.send_header('Allow', ','.join(available_methods))
+		self.send_header('Allow', ', '.join(available_methods))
 		self.end_headers()
 
 	def do_RPC(self):
