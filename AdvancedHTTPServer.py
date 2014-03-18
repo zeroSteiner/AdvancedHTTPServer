@@ -55,7 +55,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.54'
+__version__ = '0.2.55'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -166,6 +166,8 @@ def build_server_from_config(config, section_name, ServerClass = None, HandlerCl
 	else:
 		server.serve_files = True
 		server.serve_files_root = web_root
+		if config.has_option('list_directories'):
+			server.serve_files_list_directories = config.getboolean('list_directories')
 	return server
 
 class AdvancedHTTPServerRegisterPath(object):
