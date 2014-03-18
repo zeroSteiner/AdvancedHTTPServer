@@ -1,3 +1,2 @@
-*.pyc
-dist/*
-*.conf
+*
+!/AdvancedHTTPServer.py
