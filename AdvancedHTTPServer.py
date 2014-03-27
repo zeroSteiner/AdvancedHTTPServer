@@ -33,6 +33,17 @@
 #  Homepage: https://gist.github.com/zeroSteiner/4502576
 #  Author:   Spencer McIntyre (zeroSteiner)
 
+# Config File Example
+"""
+[server]
+ip = 0.0.0.0
+port = 8080
+web_root = /var/www/html
+list_directories = True
+# Set an ssl_cert to enable SSL
+# ssl_cert = /path/to/cert.pem
+"""
+
 """
 # The AdvancedHTTPServer systemd service unit file
 #
@@ -55,7 +66,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.57'
+__version__ = '0.2.58'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
