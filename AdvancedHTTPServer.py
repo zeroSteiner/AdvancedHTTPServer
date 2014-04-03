@@ -66,7 +66,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.59'
+__version__ = '0.2.60'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -484,10 +484,12 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			except os.error:
 				self.respond_not_found()
 				return None
+			if os.path.normpath(file_path) != self.server.serve_files_root:
+				dir_contents.append('..')
 			dir_contents.sort(key=lambda a: a.lower())
 			f = StringIO()
 			displaypath = cgi.escape(urllib.unquote(self.path))
-			f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">')
+			f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">\n')
 			f.write('<html>\n<title>Directory listing for ' + displaypath + '</title>\n')
 			f.write('<body>\n<h2>Directory listing for ' + displaypath + '</h2>\n')
 			f.write('<hr>\n<ul>\n')
