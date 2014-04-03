@@ -66,7 +66,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.58'
+__version__ = '0.2.59'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -162,16 +162,22 @@ def build_server_from_config(config, section_name, ServerClass = None, HandlerCl
 	ssl_certfile = None
 	if config.has_option('ssl_cert'):
 		ssl_certfile = config.get('ssl_cert')
+	server = ServerClass(HandlerClass, address = (ip, port), ssl_certfile = ssl_certfile)
 
-	password = None
+	password_type = config.get('password_type', 'md5')
 	if config.has_option('password'):
 		password = config.get('password')
-		password_type = config.get('password_type', 'md5')
-
-	server = ServerClass(HandlerClass, address = (ip, port), ssl_certfile = ssl_certfile)
-	if password:
 		username = config.get('username', '')
 		server.auth_add_creds(username, password, pwtype = password_type)
+	cred_idx = 0
+	while config.has_option('password' + str(cred_idx)):
+		password = config.get('password' + str(cred_idx))
+		if not config.has_option('username' + str(cred_idx)):
+			break
+		username = config.get('username' + str(cred_idx))
+		server.auth_add_creds(username, password, pwtype = password_type)
+		cred_idx += 1
+
 	if web_root == None:
 		server.serve_files = False
 	else:
