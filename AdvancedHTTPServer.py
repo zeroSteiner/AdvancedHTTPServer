@@ -66,7 +66,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.60'
+__version__ = '0.2.61'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -452,7 +452,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.cookies = Cookie.SimpleCookie(self.headers.get('cookie', ''))
 		for (path_regex, handler) in self.handler_map.items():
 			if re.match(path_regex, self.path):
-				if hasattr(self, handler.__name__) and handler == getattr(self, handler.__name__).__func__:
+				if hasattr(self, handler.__name__) and (handler == getattr(self, handler.__name__).__func__ or handler == getattr(self, handler.__name__)):
 					getattr(self, handler.__name__)(query)
 				else:
 					handler(self, query)
