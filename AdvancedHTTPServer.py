@@ -44,9 +44,8 @@ list_directories = True
 # ssl_cert = /path/to/cert.pem
 """
 
-"""
 # The AdvancedHTTPServer systemd service unit file
-#
+"""
 # Quick How To:
 # 1. Copy this file to /etc/systemd/system/pyhttpd.service
 # 2. Edit <USER> and run parameters appropriately in the ExecStart option
@@ -66,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.61'
+__version__ = '0.2.62'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -148,6 +147,51 @@ class SectionConfigParser(object):
 
 	def items(self):
 		return self.config_parser.items(self.section_name)
+
+def build_server_from_argparser(description = None, ServerClass = None, HandlerClass = None):
+	import argparse
+	import ConfigParser
+
+	description = (description or 'AdvancedHTTPServer')
+	ServerClass = (ServerClass or AdvancedHTTPServer)
+	HandlerClass = (HandlerClass or AdvancedHTTPServerRequestHandler)
+
+	parser = argparse.ArgumentParser(description = description, conflict_handler = 'resolve')
+	parser.epilog = 'When a config file is specified with --config the --ip, --port and --web-root options are all ignored.'
+	parser.add_argument('-w', '--web-root', dest = 'web_root', action = 'store', default = '.', help = 'path to the web root directory')
+	parser.add_argument('-p', '--port', dest = 'port', action = 'store', default = 8080, type = int, help = 'port to serve on')
+	parser.add_argument('-i', '--ip', dest = 'ip', action = 'store', default = '0.0.0.0', help = 'the ip address to serve on')
+	parser.add_argument('--password', dest = 'password', action = 'store', default = None, help = 'password to use for basic authentication')
+	parser.add_argument('--log-file', dest = 'log_file', action = 'store', default = None, help = 'log information to a file')
+	parser.add_argument('-c', '--conf', dest = 'config', action = 'store', default = None, type = argparse.FileType('r'), help = 'read settings from a config file')
+	parser.add_argument('-v', '--version', action = 'version', version = parser.prog + ' Version: ' + __version__)
+	parser.add_argument('-L', '--log', dest = 'loglvl', action = 'store', choices = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default = 'INFO', help = 'set the logging level')
+	arguments = parser.parse_args()
+
+	logging.getLogger('').setLevel(logging.DEBUG)
+	console_log_handler = logging.StreamHandler()
+	console_log_handler.setLevel(getattr(logging, arguments.loglvl))
+	console_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s"))
+	logging.getLogger('').addHandler(console_log_handler)
+
+	if arguments.log_file:
+		main_file_handler = logging.handlers.RotatingFileHandler(arguments.log_file, maxBytes = 262144, backupCount = 5)
+		main_file_handler.setLevel(logging.DEBUG)
+		main_file_handler.setFormatter(logging.Formatter("%(asctime)s %(name)-30s %(levelname)-10s %(message)s"))
+		logging.getLogger('').setLevel(logging.DEBUG)
+		logging.getLogger('').addHandler(main_file_handler)
+
+	if arguments.config:
+		config = ConfigParser.ConfigParser()
+		config.readfp(arguments.config)
+		server = build_server_from_config(config, 'server')
+	else:
+		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (arguments.ip, arguments.port))
+		server.serve_files_root = arguments.web_root
+
+	if arguments.password:
+		server.auth_add_creds('', arguments.password)
+	return server
 
 def build_server_from_config(config, section_name, ServerClass = None, HandlerClass = None):
 	ServerClass = (ServerClass or AdvancedHTTPServer)
@@ -852,49 +896,13 @@ class AdvancedHTTPServer(object):
 
 def main():
 	try:
-		import argparse
-		import ConfigParser
-		parser = argparse.ArgumentParser(description = 'AdvancedHTTPServer', conflict_handler='resolve')
-		parser.epilog = 'When a config file is specified with --config the --ip, --port and --web-root options are all ignored.'
-		parser.add_argument('-w', '--web-root', dest = 'web_root', action = 'store', default = '.', help = 'path to the web root directory')
-		parser.add_argument('-p', '--port', dest = 'port', action = 'store', default = 8080, type = int, help = 'port to serve on')
-		parser.add_argument('-i', '--ip', dest = 'ip', action = 'store', default = '0.0.0.0', help = 'the ip address to serve on')
-		parser.add_argument('--password', dest = 'password', action = 'store', default = None, help = 'password to use for basic authentication')
-		parser.add_argument('--log-file', dest = 'log_file', action = 'store', default = None, help = 'log information to a file')
-		parser.add_argument('-c', '--conf', dest = 'config', action = 'store', default = None, type = argparse.FileType('r'), help = 'read settings from a config file')
-		parser.add_argument('-v', '--version', action = 'version', version = parser.prog + ' Version: ' + __version__)
-		parser.add_argument('-L', '--log', dest = 'loglvl', action = 'store', choices = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default = 'INFO', help = 'set the logging level')
-		arguments = parser.parse_args()
-
-		logging.getLogger('').setLevel(logging.DEBUG)
-		console_log_handler = logging.StreamHandler()
-		console_log_handler.setLevel(getattr(logging, arguments.loglvl))
-		console_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s"))
-		logging.getLogger('').addHandler(console_log_handler)
-
-		if arguments.log_file:
-			main_file_handler = logging.handlers.RotatingFileHandler(arguments.log_file, maxBytes = 262144, backupCount = 5)
-			main_file_handler.setLevel(logging.DEBUG)
-			main_file_handler.setFormatter(logging.Formatter("%(asctime)s %(name)-30s %(levelname)-10s %(message)s"))
-			logging.getLogger('').setLevel(logging.DEBUG)
-			logging.getLogger('').addHandler(main_file_handler)
-
-		if arguments.config:
-			config = ConfigParser.ConfigParser()
-			config.readfp(arguments.config)
-			server = build_server_from_config(config, 'server')
-			web_root = server.serve_files_root
-		else:
-			server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (arguments.ip, arguments.port))
-			web_root = arguments.web_root
-		if arguments.password:
-			server.auth_add_creds('', arguments.password)
+		server = build_server_from_argparser()
 	except ImportError:
 		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler)
-		web_root = '.'
+		server.serve_files_root = '.'
 
+	server.serve_files_root = (server.serve_files_root or '.')
 	server.serve_files = True
-	server.serve_files_root = web_root
 	try:
 		server.serve_forever()
 	except KeyboardInterrupt:
