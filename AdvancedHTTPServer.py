@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.62'
+__version__ = '0.2.63'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -410,6 +410,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.handler_map = {}
 		self.rpc_handler_map = {}
 		self.server = args[2]
+		self.headers_active = False
 
 		for map_name in (None, self.__class__.__name__):
 			handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
@@ -563,8 +564,13 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.respond_not_found()
 		return
 
+	def send_response(self, *args, **kwargs):
+		super(AdvancedHTTPServerRequestHandler, self).send_response(*args, **kwargs)
+		self.headers_active = True
+
 	def end_headers(self):
 		super(AdvancedHTTPServerRequestHandler, self).end_headers()
+		self.headers_active = False
 		if self.command == 'HEAD':
 			self.wfile.close()
 			self.wfile = open(os.devnull, 'wb')
@@ -629,6 +635,19 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			return False
 		except:
 			return False
+
+	def cookie_get(self, name):
+		if not hasattr(self, 'cookies'):
+			return None
+		if self.cookies.get(name):
+			return self.cookies.get(name).value
+		return None
+
+	def cookie_set(self, name, value):
+		if not self.headers_active:
+			raise RuntimeError('headers have already been ended')
+		cookie = "{0}={1}; Path=/; HttpOnly".format(name, value)
+		self.send_header('Set-Cookie', cookie)
 
 	def do_GET(self):
 		if not self.check_authorization():
@@ -800,7 +819,7 @@ class AdvancedHTTPServer(object):
 	def serve_forever(self, fork = False):
 		if fork:
 			if not hasattr(os, 'fork'):
-				raise Exception('os.fork is not available')
+				raise OSError('os.fork is not available')
 			child_pid = os.fork()
 			if child_pid != 0:
 				self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - forked child process: ' + str(child_pid))
@@ -886,7 +905,7 @@ class AdvancedHTTPServer(object):
 	def auth_add_creds(self, username, password, pwtype = 'plain'):
 		pwtype = pwtype.lower()
 		if not pwtype in ('plain', 'md5', 'sha1'):
-			raise Exception('invalid password type, must be (\'plain\', \'md5\', \'sha1\')')
+			raise ValueError('invalid password type, must be (\'plain\', \'md5\', \'sha1\')')
 		if self.http_server.basic_auth == None:
 			self.http_server.basic_auth = {}
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
