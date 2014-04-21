@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.63'
+__version__ = '0.2.64'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -82,6 +82,7 @@ import os
 import posixpath
 import re
 import shutil
+import socket
 import SocketServer
 import sqlite3
 import ssl
@@ -390,6 +391,14 @@ class AdvancedHTTPServerNonThreaded(BaseHTTPServer.HTTPServer, object):
 		self.robots_txt = 'User-agent: *\nDisallow: /\n'
 		self.server_version = 'HTTPServer/' + __version__
 		super(AdvancedHTTPServerNonThreaded, self).__init__(*args, **kwargs)
+
+	def server_bind(self, *args, **kwargs):
+		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+		super(AdvancedHTTPServerNonThreaded, self).server_bind(*args, **kwargs)
+
+	def shutdown(self, *args, **kwargs):
+		super(AdvancedHTTPServerNonThreaded, self).shutdown(*args, **kwargs)
+		self.socket.close()
 
 class AdvancedHTTPServerThreaded(SocketServer.ThreadingMixIn, AdvancedHTTPServerNonThreaded):
 	pass
