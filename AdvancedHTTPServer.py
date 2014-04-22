@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.65'
+__version__ = '0.2.66'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -274,13 +274,10 @@ class AdvancedHTTPServerRPCClient(object):
 		self.username = (str(username) if username != None else None)
 		self.password = (str(password) if password != None else None)
 		self.hmac_key = (str(hmac_key) if hmac_key != None else None)
-		if self.use_ssl:
-			self.client = httplib.HTTPSConnection(self.host, self.port)
-		else:
-			self.client = httplib.HTTPConnection(self.host, self.port)
+		self.lock = threading.RLock()
 		self.serializer_name = SERIALIZER_DRIVERS.keys()[-1]
 		self.serializer = SERIALIZER_DRIVERS[self.serializer_name]
-		self.lock = threading.RLock()
+		self.reconnect()
 
 	def __reduce__(self):
 		address = (self.host, self.port)
@@ -293,11 +290,19 @@ class AdvancedHTTPServerRPCClient(object):
 	def __call__(self, *args, **kwargs):
 		return self.call(*args, **kwargs)
 
-	def encode(self,data):
+	def encode(self, data):
 		return self.serializer['dumps'](data)
 
-	def decode(self,data):
+	def decode(self, data):
 		return self.serializer['loads'](data)
+
+	def reconnect(self):
+		self.lock.acquire()
+		if self.use_ssl:
+			self.client = httplib.HTTPSConnection(self.host, self.port)
+		else:
+			self.client = httplib.HTTPConnection(self.host, self.port)
+		self.lock.release()
 
 	def call(self, method, *options):
 		options = self.encode(options)
