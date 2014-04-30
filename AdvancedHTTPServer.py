@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.69'
+__version__ = '0.2.70'
 __all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
 
 import BaseHTTPServer
@@ -188,9 +188,9 @@ def build_server_from_argparser(description = None, ServerClass = None, HandlerC
 	if arguments.config:
 		config = ConfigParser.ConfigParser()
 		config.readfp(arguments.config)
-		server = build_server_from_config(config, 'server')
+		server = build_server_from_config(config, 'server', ServerClass = ServerClass, HandlerClass = HandlerClass)
 	else:
-		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler, address = (arguments.ip, arguments.port))
+		server = ServerClass(HandlerClass, address = (arguments.ip, arguments.port))
 		server.serve_files_root = arguments.web_root
 
 	if arguments.password:
