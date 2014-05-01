@@ -65,8 +65,14 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.70'
-__all__ = ['AdvancedHTTPServer', 'AdvancedHTTPServerRegisterPath', 'AdvancedHTTPServerRequestHandler', 'AdvancedHTTPServerRPCClient', 'AdvancedHTTPServerRPCError']
+__version__ = '0.2.71'
+__all__ = [
+	'AdvancedHTTPServer',
+	'AdvancedHTTPServerRegisterPath',
+	'AdvancedHTTPServerRequestHandler',
+	'AdvancedHTTPServerRPCClient',
+	'AdvancedHTTPServerRPCError'
+]
 
 import BaseHTTPServer
 import cgi
@@ -88,6 +94,7 @@ import sqlite3
 import ssl
 import sys
 import threading
+import traceback
 import urllib
 import urlparse
 import zlib
@@ -99,6 +106,7 @@ except ImportError:
 
 GLOBAL_HANDLER_MAP = {}
 SERIALIZER_DRIVERS = {}
+SERIALIZER_DRIVERS['application/json'] = {'loads':json.loads, 'dumps':json.dumps}
 SERIALIZER_DRIVERS['binary/json'] = {'loads':json.loads, 'dumps':json.dumps}
 SERIALIZER_DRIVERS['binary/json+zlib'] = {'loads':lambda d: json.loads(zlib.decompress(d)), 'dumps':lambda d: zlib.compress(json.dumps(d))}
 
@@ -507,7 +515,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		return
 
 	def respond_not_found(self):
-		self.send_response(404, 'Resource Not Found')
+		self.send_response(404)
 		self.send_header('Content-Type', 'text/html')
 		self.end_headers()
 		self.wfile.write('Resource Not Found\n')
@@ -517,6 +525,23 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.send_response(301)
 		self.send_header('Location', location)
 		self.end_headers()
+		return
+
+	def respond_server_error(self, status = None, message = None):
+		(ex_type, ex_value, ex_traceback) = sys.exc_info()
+		if ex_type:
+			(ex_file_name, ex_line, _, _) = traceback.extract_tb(ex_traceback)[-1]
+			line_info = "{0}:{1}".format(ex_file_name, ex_line)
+			log_msg = "encountered {0} in {1}".format(repr(ex_value), line_info)
+			self.server.logger.error(log_msg)
+		status = (status or 500)
+		message = (message or httplib.responses.get(status, 'Internal Server Error'))
+		self.send_response(status)
+		if message[-1] != '\n':
+			message = message + '\n'
+		self.send_header('Content-Length', len(message))
+		self.end_headers()
+		self.wfile.write(message)
 		return
 
 	def respond_unauthorized(self, request_authentication = False):
@@ -557,10 +582,13 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.cookies = Cookie.SimpleCookie(self.headers.get('cookie', ''))
 		for (path_regex, handler) in self.handler_map.items():
 			if re.match(path_regex, self.path):
-				if hasattr(self, handler.__name__) and (handler == getattr(self, handler.__name__).__func__ or handler == getattr(self, handler.__name__)):
-					getattr(self, handler.__name__)(query)
-				else:
-					handler(self, query)
+				try:
+					if hasattr(self, handler.__name__) and (handler == getattr(self, handler.__name__).__func__ or handler == getattr(self, handler.__name__)):
+						getattr(self, handler.__name__)(query)
+					else:
+						handler(self, query)
+				except:
+					self.respond_server_error()
 				return
 
 		if not self.server.serve_files:
@@ -764,7 +792,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 				rpc_handler = handler
 				break
 		if not rpc_handler:
-			self.send_error(501, 'Method Not Implemented')
+			self.respond_server_error(501)
 			return
 
 		self.server.logger.info('running RPC method: ' + self.path)
@@ -783,7 +811,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		try:
 			response = serializer['dumps'](response)
 		except:
-			self.send_error(500, 'Failed To Pack Response')
+			self.respond_server_error(message = 'Failed To Pack Response')
 			return
 
 		self.send_response(200)
