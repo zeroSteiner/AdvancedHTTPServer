@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.72'
+__version__ = '0.2.73'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -849,6 +849,10 @@ class AdvancedHTTPServerRESTAPI(object):
 	def __init__(self, api_path = None):
 		self.api_path = (api_path or '/api/')
 		self.handler_map = {}
+		map_name = self.__class__.__name__
+		handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
+		for path, function in handler_map.items():
+			self.handler_map[path] = function
 		self.install_handlers()
 
 	@property
