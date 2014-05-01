@@ -65,11 +65,12 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.71'
+__version__ = '0.2.72'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
 	'AdvancedHTTPServerRequestHandler',
+	'AdvancedHTTPServerRESTAPI',
 	'AdvancedHTTPServerRPCClient',
 	'AdvancedHTTPServerRPCError'
 ]
@@ -438,7 +439,9 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.rpc_handler_map = {}
 		self.server = args[2]
 		self.headers_active = False
-
+		rest_api_handler = self.server.rest_api_handler
+		if rest_api_handler:
+			self.handler_map[rest_api_handler.api_path_regex] = rest_api_handler.dispatch_handler
 		for map_name in (None, self.__class__.__name__):
 			handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
 			for path, function in handler_map.items():
@@ -725,9 +728,21 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			return
 		content_length = int(self.headers.getheader('content-length') or 0)
 		data = self.rfile.read(content_length)
-		self.query_data = urlparse.parse_qs(data, keep_blank_values = 1)
-
-		self.dispatch_handler(self.query_data)
+		self.query_data_raw = data
+		content_type = self.headers.getheader('content-type') or ''
+		content_type = content_type.split(';', 1)[0]
+		self.query_data = {}
+		try:
+			if content_type.startswith('application/json'):
+				data = json.loads(data)
+				if isinstance(data, dict):
+					self.query_data = dict(map(lambda i: (i[0],[i[1]]), data.items()))
+			else:
+				self.query_data = urlparse.parse_qs(data, keep_blank_values = 1)
+		except:
+			self.respond_server_error(400)
+		else:
+			self.dispatch_handler(self.query_data)
 		return
 
 	def do_OPTIONS(self):
@@ -830,6 +845,54 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 	def log_message(self, format, *args):
 		self.server.logger.info(self.address_string() + ' ' + format % args)
 
+class AdvancedHTTPServerRESTAPI(object):
+	def __init__(self, api_path = None):
+		self.api_path = (api_path or '/api/')
+		self.handler_map = {}
+		self.install_handlers()
+
+	@property
+	def api_path_regex(self):
+		return '^' + self.api_path.strip('/') + '/\S'
+
+	def install_handlers(self):
+		pass # over ride me
+
+	def dispatch_handler(self, request_handler, query):
+		path = request_handler.path
+		prefix_len = len(re.match(self.api_path_regex, path).group(0)) - 1
+		path = path[prefix_len:]
+		handler_found = False
+		result = None
+		arguments = []
+		if request_handler.command == 'POST':
+			arguments = json.loads(request_handler.query_data_raw)
+		if not isinstance(arguments, (dict, list, tuple)):
+			arguments = [arguments]
+		for (path_regex, handler) in self.handler_map.items():
+			if re.match(path_regex, path):
+				handler_found = True
+				if hasattr(self, handler.__name__) and (handler == getattr(self, handler.__name__).__func__ or handler == getattr(self, handler.__name__)):
+					if isinstance(arguments, dict):
+						result = getattr(self, handler.__name__)(**arguments)
+					else:
+						result = getattr(self, handler.__name__)(*arguments)
+				else:
+					if isinstance(arguments, dict):
+						result = handler(self, **arguments)
+					else:
+						result = handler(self, *arguments)
+				break
+		if not handler_found:
+			request_handler.respond_server_error(501, 'Not Implemented', 'The requested method is not implemented')
+			return
+		result = json.dumps(result) + '\n'
+		request_handler.send_response(200)
+		request_handler.send_header('Content-Type', 'application/json')
+		request_handler.send_header('Content-Length', len(result))
+		request_handler.end_headers()
+		request_handler.wfile.write(result)
+
 class AdvancedHTTPServer(object):
 	"""
 	Setable properties:
@@ -864,6 +927,7 @@ class AdvancedHTTPServer(object):
 		else:
 			self.http_server = AdvancedHTTPServerNonThreaded(address, RequestHandler)
 		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
+		self.http_server.rest_api_handler = None
 
 		if self.use_ssl:
 			self.http_server.socket = ssl.wrap_socket(self.http_server.socket, certfile = ssl_certfile, server_side = True)
@@ -872,6 +936,11 @@ class AdvancedHTTPServer(object):
 
 		if hasattr(RequestHandler, 'custom_authentication'):
 			self.auth_set(True)
+
+	def init_rest_api(self, rest_api_handler):
+		if not isinstance(rest_api_handler, AdvancedHTTPServerRESTAPI):
+			raise ValueError('rest_api_handler must be an instance of AdvancedHTTPServerRESTAPI')
+		self.http_server.rest_api_handler = rest_api_handler
 
 	def serve_forever(self, fork = False):
 		if fork:
