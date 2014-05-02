@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.73'
+__version__ = '0.2.74'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -297,8 +297,11 @@ class AdvancedHTTPServerRPCClient(object):
 		return (self.__class__, (address, self.use_ssl, self.username, self.password, self.uri_base, self.hmac_key))
 
 	def set_serializer(self, serializer_name):
+		if not serializer_name in SERIALIZER_DRIVERS:
+			raise ValueError('unknown serializer: ' + serializer_name)
 		self.serializer = SERIALIZER_DRIVERS[serializer_name]
 		self.serializer_name = serializer_name
+		self.logger.debug('using serializer: ' + serializer_name)
 
 	def __call__(self, *args, **kwargs):
 		return self.call(*args, **kwargs)
