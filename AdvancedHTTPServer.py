@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.74'
+__version__ = '0.2.75'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -792,6 +792,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			hmac_calculator = hmac.new(self.server.rpc_hmac_key, digestmod = hashlib.sha1)
 			hmac_calculator.update(data)
 			if hmac_digest != hmac_calculator.hexdigest():
+				self.server.logger.warning('failed to validate HMAC digest')
 				self.respond_unauthorized(request_authentication = True)
 				return
 
@@ -801,6 +802,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 				data = tuple(data)
 			assert(type(data) == tuple)
 		except:
+			self.server.logger.warning('serializer failed to load data')
 			self.send_error(400, 'Invalid Data')
 			return
 
@@ -942,12 +944,14 @@ class AdvancedHTTPServer(object):
 			self.logger.info(address[0] + ':' + str(address[1]) + ' - ssl has been enabled')
 
 		if hasattr(RequestHandler, 'custom_authentication'):
+			self.logger.debug(address[0] + ':' + str(address[1]) + ' - a custom authentication function is being used')
 			self.auth_set(True)
 
 	def init_rest_api(self, rest_api_handler):
 		if not isinstance(rest_api_handler, AdvancedHTTPServerRESTAPI):
 			raise ValueError('rest_api_handler must be an instance of AdvancedHTTPServerRESTAPI')
 		self.http_server.rest_api_handler = rest_api_handler
+		self.logger.debug(address[0] + ':' + str(address[1]) + ' - a REST API handler has been registered')
 
 	def serve_forever(self, fork = False):
 		if fork:
