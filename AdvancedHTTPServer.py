@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.77'
+__version__ = '0.2.78'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -614,15 +614,14 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 					destination += '?' + urllib.urlencode(self.query_data, True)
 				self.respond_redirect(destination)
 				return
+			for index in ['index.html', 'index.htm']:
+				index = os.path.join(file_path, index)
+				if os.path.isfile(index):
+					self.respond_file(index, query=query)
+					return
 			if self.server.serve_files_list_directories:
 				self.respond_list_directory(file_path, query=query)
 				return
-			for index in ['index.html', 'index.htm']:
-				index = os.path.join(file_path, index)
-				if os.path.exists(index):
-					self.respond_file(index, query=query)
-					return
-
 		self.respond_not_found()
 		return
 
