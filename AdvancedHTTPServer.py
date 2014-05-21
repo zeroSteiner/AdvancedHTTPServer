@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.76'
+__version__ = '0.2.77'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -219,7 +219,7 @@ def build_server_from_config(config, section_name, ServerClass=None, HandlerClas
 	ssl_certfile = None
 	if config.has_option('ssl_cert'):
 		ssl_certfile = config.get('ssl_cert')
-	server = ServerClass(HandlerClass, address=(ip, port), ssl_certfile = ssl_certfile)
+	server = ServerClass(HandlerClass, address=(ip, port), ssl_certfile=ssl_certfile)
 
 	password_type = config.get('password_type', 'md5')
 	if config.has_option('password'):
