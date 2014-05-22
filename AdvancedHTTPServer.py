@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.78'
+__version__ = '0.2.79'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -603,10 +603,10 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 
 		file_path = self.server.serve_files_root
 		file_path = os.path.join(file_path, tmp_path)
-		if os.path.isfile(file_path):
+		if os.path.isfile(file_path) and os.access(file_path, os.R_OK):
 			self.respond_file(file_path, query=query)
 			return
-		elif os.path.isdir(file_path):
+		elif os.path.isdir(file_path) and os.access(file_path, os.R_OK):
 			if not self.original_path.endswith('/'):
 				# redirect browser, doing what apache does
 				destination = self.path + '/'
@@ -616,7 +616,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 				return
 			for index in ['index.html', 'index.htm']:
 				index = os.path.join(file_path, index)
-				if os.path.isfile(index):
+				if os.path.isfile(index) and os.access(index, os.R_OK):
 					self.respond_file(index, query=query)
 					return
 			if self.server.serve_files_list_directories:
