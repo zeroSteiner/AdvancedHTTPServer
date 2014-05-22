@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.79'
+__version__ = '0.2.80'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -533,7 +533,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.end_headers()
 		return
 
-	def respond_server_error(self, status=None, message=None):
+	def respond_server_error(self, status=None, status_line=None, message=None):
 		(ex_type, ex_value, ex_traceback) = sys.exc_info()
 		if ex_type:
 			(ex_file_name, ex_line, _, _) = traceback.extract_tb(ex_traceback)[-1]
@@ -541,13 +541,20 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			log_msg = "encountered {0} in {1}".format(repr(ex_value), line_info)
 			self.server.logger.error(log_msg)
 		status = (status or 500)
-		message = (message or httplib.responses.get(status, 'Internal Server Error'))
-		self.send_response(status)
-		if message[-1] != '\n':
-			message = message + '\n'
-		self.send_header('Content-Length', len(message))
-		self.end_headers()
-		self.wfile.write(message)
+		status_line = (status_line or httplib.responses.get(status, 'Internal Server Error')).strip()
+		self.send_response(status, status_line)
+		message = (message or status_line)
+		if isinstance(message, (str, unicode)):
+			self.send_header('Content-Length', len(message))
+			self.end_headers()
+			self.wfile.write(message)
+		elif hasattr(message, 'fileno'):
+			fs = os.fstat(message.fileno())
+			self.send_header('Content-Length', str(fs[6]))
+			self.end_headers()
+			shutil.copyfileobj(message, self.wfile)
+		else:
+			self.end_headers()
 		return
 
 	def respond_unauthorized(self, request_authentication=False):
@@ -873,6 +880,8 @@ class AdvancedHTTPServerRESTAPI(object):
 		handler_found = False
 		result = None
 		arguments = []
+		if request_handler.command == 'GET':
+			arguments = dict(map(lambda i: (i[0], i[1][-1]), query.items()))
 		if request_handler.command == 'POST':
 			arguments = json.loads(request_handler.query_data_raw)
 		if not isinstance(arguments, (dict, list, tuple)):
@@ -892,7 +901,7 @@ class AdvancedHTTPServerRESTAPI(object):
 						result = handler(self, *arguments)
 				break
 		if not handler_found:
-			request_handler.respond_server_error(501, 'Not Implemented', 'The requested method is not implemented')
+			request_handler.respond_server_error(501)
 			return
 		result = json.dumps(result) + '\n'
 		request_handler.send_response(200)
@@ -950,7 +959,7 @@ class AdvancedHTTPServer(object):
 		if not isinstance(rest_api_handler, AdvancedHTTPServerRESTAPI):
 			raise ValueError('rest_api_handler must be an instance of AdvancedHTTPServerRESTAPI')
 		self.http_server.rest_api_handler = rest_api_handler
-		self.logger.debug(address[0] + ':' + str(address[1]) + ' - a REST API handler has been registered')
+		self.logger.debug(self.address[0] + ':' + str(self.address[1]) + ' - a REST API handler has been registered')
 
 	def serve_forever(self, fork=False):
 		if fork:
