@@ -1,0 +1,10 @@
+*.conf
+*.geany
+*.py[cod]
+
+.buildinfo
+.doctrees/*
+.idea/*
+build/*
+dist/*
+docs/build
