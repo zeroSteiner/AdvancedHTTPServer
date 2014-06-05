@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.80'
+__version__ = '0.2.81'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -162,6 +162,19 @@ class SectionConfigParser(object):
 		self.config_parser.set(self.section_name, option, value)
 
 def build_server_from_argparser(description=None, ServerClass=None, HandlerClass=None):
+	"""
+	Build a server from command line arguments. If a ServerClass or
+	HandlerClass is specified, then the object must inherit from the
+	corresponding AdvancedHTTPServer base class.
+
+	:param str description: Description string to be passed to the argument parser.
+	:param ServerClass: Alternative server class to use.
+	:type ServerClass: :py:class:`.AdvancedHTTPServer`
+	:param HandlerClass: Alternative handler class to use.
+	:type HandlerClass: :py:class:`.AdvancedHTTPServerRequestHandler`
+	:return: A configured server instance.
+	:rtype: :py:class:`.AdvancedHTTPServer`
+	"""
 	import argparse
 	import ConfigParser
 
@@ -207,6 +220,22 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 	return server
 
 def build_server_from_config(config, section_name, ServerClass=None, HandlerClass=None):
+	"""
+	Build a server from a provided :py:class:`ConfigParser.ConfigParser`
+	instance. If a ServerClass or HandlerClass is specified, then the
+	object must inherit from the corresponding AdvancedHTTPServer base
+	class.
+
+	:param config: Configuration to retrieve settings from.
+	:type config: :py:class:`ConfigParser.ConfigParser`
+	:param str section_name: The section name of the configuration to use.
+	:param ServerClass: Alternative server class to use.
+	:type ServerClass: :py:class:`.AdvancedHTTPServer`
+	:param HandlerClass: Alternative handler class to use.
+	:type HandlerClass: :py:class:`.AdvancedHTTPServerRequestHandler`
+	:return: A configured server instance.
+	:rtype: :py:class:`.AdvancedHTTPServer`
+	"""
 	ServerClass = (ServerClass or AdvancedHTTPServer)
 	HandlerClass = (HandlerClass or AdvancedHTTPServerRequestHandler)
 	config = SectionConfigParser(section_name, config)
@@ -245,7 +274,23 @@ def build_server_from_config(config, section_name, ServerClass=None, HandlerClas
 	return server
 
 class AdvancedHTTPServerRegisterPath(object):
+	"""
+	Register a path and handler with the global handler map. This can be
+	used as a decorator. If no handler is specified then the path and
+	function will be registered with all :py:class:`.AdvancedHTTPServerRequestHandler`
+	instances.
+
+	.. code-block:: python
+
+	  @AdvancedHTTPServerRegisterPath('/test')
+	  def handle_test(handler, query):
+	      pass
+	"""
 	def __init__(self, path, handler=None):
+		"""
+		:param str path: The path regex to register the function to.
+		:param str handler: A specific :py:class:`.AdvancedHTTPServerRequestHandler` class to register the handler with.
+		"""
 		self.path = path
 		if handler == None or isinstance(handler, (str, unicode)):
 			self.handler = handler
@@ -263,6 +308,10 @@ class AdvancedHTTPServerRegisterPath(object):
 		return function
 
 class AdvancedHTTPServerRPCError(Exception):
+	"""
+	This class represents an RPC error either local or remote. Any errors
+	in routines executed on the server will raise this error.
+	"""
 	def __init__(self, message, status, remote_exception=None):
 		self.message = message
 		self.status = status
@@ -273,10 +322,31 @@ class AdvancedHTTPServerRPCError(Exception):
 
 	@property
 	def is_remote_exception(self):
+		"""
+		This is true of the represented error resulted from an exception
+		on the remote server.
+		"""
 		return bool(self.remote_exception != None)
 
 class AdvancedHTTPServerRPCClient(object):
+	"""
+	This object facilitates communication with remote RPC methods as
+	provided by a :py:class:`.AdvancedHTTPServerRequestHandler` instance.
+	Once created this object can be called directly, doing so is the same
+	as using the call method.
+
+	This object uses locks internally to be thread safe. Only one thread
+	can execute a function at a time.
+	"""
 	def __init__(self, address, use_ssl=False, username=None, password=None, uri_base='/', hmac_key=None):
+		"""
+		:param tuple address: The address of the server to conenct to as (host, port).
+		:param bool use_ssl: Whether to connect with SSL or not.
+		:param str username: The username to authenticate with.
+		:param str password: The password to authenticate with.
+		:param str uri_base: An optional prefix for all methods.
+		:param str hmac_key: An HMAC key to use for request authentication.
+		"""
 		self.host = str(address[0])
 		self.port = int(address[1])
 		if not hasattr(self, 'logger'):
@@ -297,6 +367,13 @@ class AdvancedHTTPServerRPCClient(object):
 		return (self.__class__, (address, self.use_ssl, self.username, self.password, self.uri_base, self.hmac_key))
 
 	def set_serializer(self, serializer_name):
+		"""
+		Configure the serializer to use for communication with the server.
+		The serializer specified must be valid and in the
+		:py:data:`.SERIALIZER_DRIVERS` map.
+
+		:param str serializer_name: The name of the serializer to use.
+		"""
 		if not serializer_name in SERIALIZER_DRIVERS:
 			raise ValueError('unknown serializer: ' + serializer_name)
 		self.serializer = SERIALIZER_DRIVERS[serializer_name]
@@ -307,12 +384,15 @@ class AdvancedHTTPServerRPCClient(object):
 		return self.call(*args, **kwargs)
 
 	def encode(self, data):
+		"""Encode data with the configured serializer."""
 		return self.serializer['dumps'](data)
 
 	def decode(self, data):
+		"""Decode data with the configured serializer."""
 		return self.serializer['loads'](data)
 
 	def reconnect(self):
+		"""Reconnect to the remote server."""
 		self.lock.acquire()
 		if self.use_ssl:
 			self.client = httplib.HTTPSConnection(self.host, self.port)
@@ -321,6 +401,13 @@ class AdvancedHTTPServerRPCClient(object):
 		self.lock.release()
 
 	def call(self, method, *options):
+		"""
+		Issue a call to the remote end point to execute the specified
+		procedure.
+
+		:param str method: The name of the remote procedure to execute.
+		:return: The return value from the remote function.
+		"""
 		options = self.encode(options)
 
 		headers = {}
@@ -361,6 +448,10 @@ class AdvancedHTTPServerRPCClient(object):
 		return resp_data['result']
 
 class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
+	"""
+	This object builds upon :py:class:`.AdvancedHTTPServerRPCClient` and
+	provides additional methods for cacheing results in memory.
+	"""
 	def __init__(self, *args, **kwargs):
 		super(AdvancedHTTPServerRPCClientCached, self).__init__(*args, **kwargs)
 		self.cache_db = sqlite3.connect(':memory:', check_same_thread=False)
@@ -369,6 +460,14 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		self.cache_db.commit()
 
 	def cache_call(self, method, *options):
+		"""
+		Call a remote method and store the result locally. Subsequent
+		calls to the same method with the same arguments will return the
+		cached result without invoking the remote procedure.
+
+		:param str method: The name of the remote procedure to execute.
+		:return: The return value from the remote function.
+		"""
 		options_hash = hashlib.new('sha1', self.encode(options)).hexdigest()
 		cursor = self.cache_db.cursor()
 
@@ -383,6 +482,13 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		return return_value
 
 	def cache_call_refresh(self, method, *options):
+		"""
+		Call a remote method and update the local cache with the result
+		if it already existed.
+
+		:param str method: The name of the remote procedure to execute.
+		:return: The return value from the remote function.
+		"""
 		options_hash = hashlib.new('sha1', self.encode(options)).hexdigest()
 		cursor = self.cache_db.cursor()
 		cursor.execute('DELETE FROM cache WHERE method = ? AND options_hash = ?', (method, options_hash))
@@ -392,6 +498,7 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		return return_value
 
 	def cache_clear(self):
+		"""Purge the local store of all cached function information."""
 		cursor = self.cache_db.cursor()
 		cursor.execute('DELETE FROM cache')
 		self.cache_db.commit()
@@ -399,6 +506,10 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		return
 
 class AdvancedHTTPServerNonThreaded(BaseHTTPServer.HTTPServer, object):
+	"""
+	This class is used internally by :py:class:`.AdvancedHTTPServer` and
+	is not intended for use by other classes or functions.
+	"""
 	def __init__(self, *args, **kwargs):
 		if not hasattr(self, 'logger'):
 			self.logger = logging.getLogger('AdvancedHTTPServer')
@@ -423,9 +534,22 @@ class AdvancedHTTPServerNonThreaded(BaseHTTPServer.HTTPServer, object):
 		self.socket.close()
 
 class AdvancedHTTPServerThreaded(SocketServer.ThreadingMixIn, AdvancedHTTPServerNonThreaded):
+	"""
+	This class is used internally by :py:class:`.AdvancedHTTPServer` and
+	is not intended for use by other classes or functions.
+	"""
 	pass
 
 class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, object):
+	"""
+	This is the primary http request handler class of the
+	AdvancedHTTPServer framework. Custom request handler must inherit
+	from this object to be compatible. Instances of this class are created
+	automatically. This class will handle standard HTTP GET, HEAD, OPTIONS,
+	and POST requests. Handler functions that are not class methods of
+	the request handler instance will be passed the instance of the
+	request handler as the first argument.
+	"""
 	if not mimetypes.inited:
 		mimetypes.init() # try to read system mime.types
 	extensions_map = mimetypes.types_map.copy()
@@ -458,10 +582,21 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		return self.server.server_version
 
 	def install_handlers(self):
+		"""
+		This method is meant to be over ridden by custom classes. It is
+		called as part of the __init__ method and provides an opportunity
+		for the handler maps to be populated with entries.
+		"""
 		pass # over ride me
 
 	def respond_file(self, file_path, attachment=False, query=None):
-		query = (query or {})
+		"""
+		Respond to the client by serving a file, either directly or as
+		an attachment.
+
+		:param str file_path: The path to the file to serve, this does not need to be in the web root.
+		:param bool attachment: Whether to serve the file as a download by setting the Content-Disposition header.
+		"""
 		file_path = os.path.abspath(file_path)
 		try:
 			file_obj = open(file_path, 'rb')
@@ -482,7 +617,12 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		return
 
 	def respond_list_directory(self, dir_path, query=None):
-		query = (query or {})
+		"""
+		Respond to the client with an HTML page listing the contents of
+		the specified directory.
+
+		:param str dir_path: The path of the directory to list the contents of.
+		"""
 		try:
 			dir_contents = os.listdir(dir_path)
 		except os.error:
@@ -521,6 +661,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		return
 
 	def respond_not_found(self):
+		"""Respond to the client with a default 404 message."""
 		self.send_response(404)
 		self.send_header('Content-Type', 'text/html')
 		self.end_headers()
@@ -528,12 +669,26 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		return
 
 	def respond_redirect(self, location='/'):
+		"""
+		Respond to the client with a 301 message and redirect them with
+		a Location header.
+
+		:param str location: The new location to redirect the client to.
+		"""
 		self.send_response(301)
 		self.send_header('Location', location)
 		self.end_headers()
 		return
 
 	def respond_server_error(self, status=None, status_line=None, message=None):
+		"""
+		Handle an internal server error, logging a traceback if executed
+		within an exception handler.
+
+		:param int status: The status code to respond to the client with.
+		:param str status_line: The status message to respond to the client with.
+		:param str message: The body of the response that is sent to the client.
+		"""
 		(ex_type, ex_value, ex_traceback) = sys.exc_info()
 		if ex_type:
 			(ex_file_name, ex_line, _, _) = traceback.extract_tb(ex_traceback)[-1]
@@ -558,6 +713,11 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		return
 
 	def respond_unauthorized(self, request_authentication=False):
+		"""
+		Respond to the client that the request is unauthorized.
+
+		:param bool request_authentication: Whether to request basic authentication information by sending a WWW-Authenticate header.
+		"""
 		self.send_response(401)
 		if request_authentication:
 			self.send_header('WWW-Authenticate', 'Basic realm="' + self.server_version + '"')
@@ -567,6 +727,15 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		return
 
 	def dispatch_handler(self, query=None):
+		"""
+		Dispatch functions based on the established handler_map. It is
+		generally not necessary to override this function and doing so
+		will prevent any handlers from being executed. This function is
+		executed automatically when requests of either GET, HEAD, or POST
+		are received.
+
+		:param dict query: Parsed query parameters from the corresponding request.
+		"""
 		query = (query or {})
 		# normalize the path
 		# abandon query parameters
@@ -644,6 +813,14 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			self.wfile = open(os.devnull, 'wb')
 
 	def guess_mime_type(self, path):
+		"""
+		Guess an appropriate MIME type based on the extension of the
+		provided path.
+
+		:param str path: The of the file to analyze.
+		:return: The guessed MIME type of the default if non are found.
+		:rtype: str
+		"""
 		base, ext = posixpath.splitext(path)
 		if ext in self.extensions_map:
 			return self.extensions_map[ext]
@@ -654,14 +831,20 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			return self.extensions_map['']
 
 	def stock_handler_respond_unauthorized(self, query):
+		"""This method provides a handler suitable to be used in the handler_map."""
 		self.respond_unauthorized()
 		return
 
 	def stock_handler_respond_not_found(self, query):
+		"""This method provides a handler suitable to be used in the handler_map."""
 		self.respond_not_found()
 		return
 
 	def check_authorization(self):
+		"""
+		Check for the presence of a basic auth Authorization header and
+		if the credentials contained within are valid.
+		"""
 		try:
 			if self.server.basic_auth == None:
 				return True
@@ -705,6 +888,12 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			return False
 
 	def cookie_get(self, name):
+		"""
+		Check for a cookie value by name.
+
+		:param str name: Name of the cookie value to retreive.
+		:return: Returns the cookie value if it's set or None if it's not found.
+		"""
 		if not hasattr(self, 'cookies'):
 			return None
 		if self.cookies.get(name):
@@ -712,6 +901,13 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		return None
 
 	def cookie_set(self, name, value):
+		"""
+		Set the value of a client cookie. This can only be called while
+		headers can be sent.
+
+		:param str name: The name of the cookie value to set.
+		:param str value: The value of the cookie to set.
+		"""
 		if not self.headers_active:
 			raise RuntimeError('headers have already been ended')
 		cookie = "{0}={1}; Path=/; HttpOnly".format(name, value)
@@ -857,8 +1053,16 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.server.logger.info(self.address_string() + ' ' + format % args)
 
 class AdvancedHTTPServerRESTAPI(object):
-	def __init__(self, api_path=None):
-		self.api_path = (api_path or '/api/')
+	"""
+	This is a manager REST request handlers. It allows them to be grouped
+	together and to use a common base path, '/api/' by default. Handler
+	functions that are not class methods will be passed the instance of
+	the managing class as the first argument.
+	"""
+	def __init__(self, api_path='/api/'):
+		"""
+		:param str api_path: A base path to be prefixed to all handlers.
+		"""
 		self.handler_map = {}
 		map_name = self.__class__.__name__
 		handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
@@ -871,9 +1075,23 @@ class AdvancedHTTPServerRESTAPI(object):
 		return '^' + self.api_path.strip('/') + '/\S'
 
 	def install_handlers(self):
+		"""
+		This method is meant to be over ridden by custom classes. It is
+		called as part of the __init__ method and provides an opportunity
+		for the handler maps to be populated with entries.
+		"""
 		pass # over ride me
 
 	def dispatch_handler(self, request_handler, query):
+		"""
+		Dispatch functions based on the established handler_map. It is
+		generally not necessary to override this function and doing so
+		will prevent any handlers from being executed. This function is
+		executed automatically when requests are received that being with
+		the specified api base path.
+
+		:param dict query: Parsed query parameters from the corresponding request.
+		"""
 		path = request_handler.path
 		prefix_len = len(re.match(self.api_path_regex, path).group(0)) - 1
 		path = path[prefix_len:]
@@ -912,15 +1130,20 @@ class AdvancedHTTPServerRESTAPI(object):
 
 class AdvancedHTTPServer(object):
 	"""
-	Setable properties:
-		serve_files (boolean)
-		serve_files_root (string)
-		serve_files_list_directories (boolean)
-		serve_robots_txt (boolean)
-		rpc_hmac_key (string)
-		server_version (string)
+	This is the primary server class for the AdvancedHTTPServer framework.
+	Custom servers must inherit from this object to be compatible. When
+	no *address* parameter is specified the address '0.0.0.0' is used and
+	the port is guessed based on if the server is run as root or not and
+	SSL is used.
 	"""
 	def __init__(self, RequestHandler, address=None, use_threads=True, ssl_certfile=None):
+		"""
+		:param RequestHandler: The request handler class to use.
+		:type RequestHandler: :py:class:`.AdvancedHTTPServerRequestHandler`
+		:param tuple address: The address to bind to in the format (host, port).
+		:param bool use_threads: Whether to enable the use of a threaded handler.
+		:param str ssl_certfile: A SSL certificate file to use, setting this enables SSL.
+		"""
 		self.use_ssl = bool(ssl_certfile)
 		if address == None:
 			if self.use_ssl:
@@ -956,12 +1179,25 @@ class AdvancedHTTPServer(object):
 			self.auth_set(True)
 
 	def init_rest_api(self, rest_api_handler):
+		"""
+		Initialize a REST API Handler.
+
+		:param rest_api_handler: The handler instance to register with the server.
+		:type rest_api_handler: :py:class:`.AdvancedHTTPServerRESTAPI`
+		"""
 		if not isinstance(rest_api_handler, AdvancedHTTPServerRESTAPI):
 			raise ValueError('rest_api_handler must be an instance of AdvancedHTTPServerRESTAPI')
 		self.http_server.rest_api_handler = rest_api_handler
 		self.logger.debug(self.address[0] + ':' + str(self.address[1]) + ' - a REST API handler has been registered')
 
 	def serve_forever(self, fork=False):
+		"""
+		Start handling requests. This method must be called and does not
+		return unless the :py:func:`.shutdown` method is called from
+		another thread.
+
+		:param bool fork: Whether to fork or not before serving content.
+		"""
 		if fork:
 			if not hasattr(os, 'fork'):
 				raise OSError('os.fork is not available')
@@ -974,11 +1210,17 @@ class AdvancedHTTPServer(object):
 		return 0
 
 	def shutdown(self):
+		"""Shutdown the server and stop responding to requests."""
 		if self.server_started:
 			self.http_server.shutdown()
 
 	@property
 	def serve_files(self):
+		"""
+		Whether to enable serving files or not.
+
+		:type: bool
+		"""
 		return self.http_server.serve_files
 
 	@serve_files.setter
@@ -994,6 +1236,11 @@ class AdvancedHTTPServer(object):
 
 	@property
 	def serve_files_root(self):
+		"""
+		The web root to use when serving files.
+
+		:type: str
+		"""
 		return self.http_server.serve_files_root
 
 	@serve_files_root.setter
@@ -1002,6 +1249,12 @@ class AdvancedHTTPServer(object):
 
 	@property
 	def serve_files_list_directories(self):
+		"""
+		Whether to list the contents of directories. This is only honored
+		when :py:attr:`.serve_files` is True.
+
+		:type: bool
+		"""
 		return self.http_server.serve_files_list_directories
 
 	@serve_files_list_directories.setter
@@ -1010,6 +1263,11 @@ class AdvancedHTTPServer(object):
 
 	@property
 	def serve_robots_txt(self):
+		"""
+		Whether to serve a default robots.txt file which denies everything.
+
+		:type: bool
+		"""
 		return self.http_server.serve_robots_txt
 
 	@serve_robots_txt.setter
@@ -1018,6 +1276,11 @@ class AdvancedHTTPServer(object):
 
 	@property
 	def rpc_hmac_key(self):
+		"""
+		An HMAC key to be used for authenticating RPC requests.
+
+		:type: str
+		"""
 		return self.http_server.rpc_hmac_key
 
 	@rpc_hmac_key.setter
@@ -1026,6 +1289,11 @@ class AdvancedHTTPServer(object):
 
 	@property
 	def server_version(self):
+		"""
+		The server version to be sent to clients in headers.
+
+		:type: str
+		"""
 		return self.http_server.server_version
 
 	@server_version.setter
@@ -1033,6 +1301,11 @@ class AdvancedHTTPServer(object):
 		self.http_server.server_version = str(value)
 
 	def auth_set(self, status):
+		"""
+		Enable or disable requring authentication on all incoming requests.
+
+		:param bool status: Whether to enable or disable requiring authentication.
+		"""
 		if not bool(status):
 			self.http_server.basic_auth = None
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been disabled')
@@ -1041,6 +1314,12 @@ class AdvancedHTTPServer(object):
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
 
 	def auth_delete_creds(self, username=None):
+		"""
+		Delete the credentials for a specific username if specified or all
+		stored credentials.
+
+		:param str username: The username of the credentials to delete.
+		"""
 		if not username:
 			self.http_server.basic_auth = {}
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication database has been cleared of all entries')
@@ -1048,6 +1327,16 @@ class AdvancedHTTPServer(object):
 		del self.http_server.basic_auth[username]
 
 	def auth_add_creds(self, username, password, pwtype='plain'):
+		"""
+		Add a valid set of credentials to be accepted for authentication.
+		Calling this function will automatically enable requiring
+		authentication. Passwords can be provided in either plaintext or
+		as a hash by specifying the hash type in the *pwtype* argument.
+
+		:param str username: The username of the credentials to be added.
+		:param str password: The password data of the credentials to be added.
+		:param str pwtype: The type of the *password* data, (plain, md5 or sha1).
+		"""
 		pwtype = pwtype.lower()
 		if not pwtype in ('plain', 'md5', 'sha1'):
 			raise ValueError('invalid password type, must be (\'plain\', \'md5\', \'sha1\')')
