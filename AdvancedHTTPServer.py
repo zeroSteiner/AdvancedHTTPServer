@@ -30,7 +30,7 @@
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-#  Homepage: https://gist.github.com/zeroSteiner/4502576
+#  Homepage: https://github.com/zeroSteiner/AdvancedHTTPServer
 #  Author:   Spencer McIntyre (zeroSteiner)
 
 # Config File Example
@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.2.81'
+__version__ = '0.3.0'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -121,45 +121,6 @@ else:
 
 if hasattr(logging, 'NullHandler'):
 	logging.getLogger('AdvancedHTTPServer').addHandler(logging.NullHandler())
-
-class SectionConfigParser(object):
-	__version__ = '0.2'
-	def __init__(self, section_name, config_parser):
-		self.section_name = section_name
-		self.config_parser = config_parser
-
-	def get_raw(self, option, opt_type, default=None):
-		get_func = getattr(self.config_parser, 'get' + opt_type)
-		if default == None:
-			return get_func(self.section_name, option)
-		elif self.config_parser.has_option(self.section_name, option):
-			return get_func(self.section_name, option)
-		else:
-			return default
-
-	def get(self, option, default=None):
-		return self.get_raw(option, '', default)
-
-	def getint(self, option, default=None):
-		return self.get_raw(option, 'int', default)
-
-	def getfloat(self, option, default=None):
-		return self.get_raw(option, 'float', default)
-
-	def getboolean(self, option, default=None):
-		return self.get_raw(option, 'boolean', default)
-
-	def has_option(self, option):
-		return self.config_parser.has_option(self.section_name, option)
-
-	def options(self):
-		return self.config_parser.options(self.section_name)
-
-	def items(self):
-		return self.config_parser.items(self.section_name)
-
-	def set(self, option, value):
-		self.config_parser.set(self.section_name, option, value)
 
 def build_server_from_argparser(description=None, ServerClass=None, HandlerClass=None):
 	"""
@@ -238,29 +199,37 @@ def build_server_from_config(config, section_name, ServerClass=None, HandlerClas
 	"""
 	ServerClass = (ServerClass or AdvancedHTTPServer)
 	HandlerClass = (HandlerClass or AdvancedHTTPServerRequestHandler)
-	config = SectionConfigParser(section_name, config)
-	port = config.getint('port')
+	port = config.getint(section_name, 'port')
 	web_root = None
-	if config.has_option('web_root'):
-		web_root = config.get('web_root')
+	if config.has_option(section_name, 'web_root'):
+		web_root = config.get(section_name, 'web_root')
 
-	ip = config.get('ip', '0.0.0.0')
+	if config.has_option(section_name, 'ip'):
+		ip = config.get(section_name, 'ip')
+	else:
+		ip = '0.0.0.0'
 	ssl_certfile = None
-	if config.has_option('ssl_cert'):
-		ssl_certfile = config.get('ssl_cert')
+	if config.has_option(section_name, 'ssl_cert'):
+		ssl_certfile = config.get(section_name, 'ssl_cert')
 	server = ServerClass(HandlerClass, address=(ip, port), ssl_certfile=ssl_certfile)
 
-	password_type = config.get('password_type', 'md5')
-	if config.has_option('password'):
-		password = config.get('password')
-		username = config.get('username', '')
+	if config.has_option(section_name, 'password_type'):
+		password_type = config.get(section_name, 'password_type')
+	else:
+		password_type = 'md5'
+	if config.has_option(section_name, 'password'):
+		password = config.get(section_name, 'password')
+		if config.has_option(section_name, 'username'):
+			username = config.get(section_name, 'username')
+		else:
+			username = ''
 		server.auth_add_creds(username, password, pwtype=password_type)
 	cred_idx = 0
-	while config.has_option('password' + str(cred_idx)):
-		password = config.get('password' + str(cred_idx))
-		if not config.has_option('username' + str(cred_idx)):
+	while config.has_option(section_name, 'password' + str(cred_idx)):
+		password = config.get(section_name, 'password' + str(cred_idx))
+		if not config.has_option(section_name, 'username' + str(cred_idx)):
 			break
-		username = config.get('username' + str(cred_idx))
+		username = config.get(section_name, 'username' + str(cred_idx))
 		server.auth_add_creds(username, password, pwtype=password_type)
 		cred_idx += 1
 
@@ -269,8 +238,8 @@ def build_server_from_config(config, section_name, ServerClass=None, HandlerClas
 	else:
 		server.serve_files = True
 		server.serve_files_root = web_root
-		if config.has_option('list_directories'):
-			server.serve_files_list_directories = config.getboolean('list_directories')
+		if config.has_option(section_name, 'list_directories'):
+			server.serve_files_list_directories = config.getboolean(section_name, 'list_directories')
 	return server
 
 class AdvancedHTTPServerRegisterPath(object):
