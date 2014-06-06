@@ -2,7 +2,7 @@
 ==============================================================
 
 .. module:: AdvancedHTTPServer
-   :synopsis: Light and flexible web framework.
+   :synopsis: Light and flexible web framework
 
 AdvancedHTTPServer is a light weight module that provides a set of classes
 for quickly making HTTP servers for a variety of purposes. It focuses on

@@ -251,7 +251,7 @@ class AdvancedHTTPServerRegisterPath(object):
 
 	.. code-block:: python
 
-	  @AdvancedHTTPServerRegisterPath('/test')
+	  @AdvancedHTTPServerRegisterPath('^test$')
 	  def handle_test(handler, query):
 	      pass
 	"""
@@ -512,10 +512,13 @@ class AdvancedHTTPServerThreaded(SocketServer.ThreadingMixIn, AdvancedHTTPServer
 class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, object):
 	"""
 	This is the primary http request handler class of the
-	AdvancedHTTPServer framework. Custom request handler must inherit
+	AdvancedHTTPServer framework. Custom request handlers must inherit
 	from this object to be compatible. Instances of this class are created
 	automatically. This class will handle standard HTTP GET, HEAD, OPTIONS,
-	and POST requests. Handler functions that are not class methods of
+	and POST requests. Callback functions called handlers can be registered
+	to resource paths using regular expressions in the *handler_map*
+	attribute for GET HEAD and POST requests and *rpc_handler_map* for RPC
+	requests. Non-RPC handler functions that are not class methods of
 	the request handler instance will be passed the instance of the
 	request handler as the first argument.
 	"""
