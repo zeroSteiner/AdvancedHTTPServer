@@ -1035,6 +1035,7 @@ class AdvancedHTTPServerRESTAPI(object):
 		"""
 		:param str api_path: A base path to be prefixed to all handlers.
 		"""
+		self.api_path = api_path
 		self.handler_map = {}
 		map_name = self.__class__.__name__
 		handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
@@ -1069,12 +1070,10 @@ class AdvancedHTTPServerRESTAPI(object):
 		path = path[prefix_len:]
 		handler_found = False
 		result = None
-		arguments = []
-		if request_handler.command == 'GET':
+		arguments = query
+		if isinstance(arguments, (dict)):
 			arguments = dict(map(lambda i: (i[0], i[1][-1]), query.items()))
-		if request_handler.command == 'POST':
-			arguments = json.loads(request_handler.query_data_raw)
-		if not isinstance(arguments, (dict, list, tuple)):
+		elif not isinstance(arguments, (list, tuple)):
 			arguments = [arguments]
 		for (path_regex, handler) in self.handler_map.items():
 			if re.match(path_regex, path):
