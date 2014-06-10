@@ -13,7 +13,7 @@
 #    copyright notice, this list of conditions and the following disclaimer
 #    in the documentation and/or other materials provided with the
 #    distribution.
-#  * Neither the name of the SecureState Consulting nor the names of its
+#  * Neither the name of the project nor the names of its
 #    contributors may be used to endorse or promote products derived from
 #    this software without specific prior written permission.
 #
@@ -77,6 +77,7 @@ __all__ = [
 
 import BaseHTTPServer
 import cgi
+import ConfigParser
 import Cookie
 import hashlib
 import hmac
@@ -87,15 +88,18 @@ import logging.handlers
 import mimetypes
 import os
 import posixpath
+import random
 import re
 import shutil
 import socket
 import SocketServer
 import sqlite3
 import ssl
+import string
 import sys
 import threading
 import traceback
+import unittest
 import urllib
 import urlparse
 import zlib
@@ -121,6 +125,17 @@ else:
 
 if hasattr(logging, 'NullHandler'):
 	logging.getLogger('AdvancedHTTPServer').addHandler(logging.NullHandler())
+
+def random_string(size):
+	"""
+	Generate a random string of *size* length consisting of both letters
+	and numbers.
+
+	:param int size: The length of the string to return.
+	:return: A string consisting of random characters.
+	:rtype: str
+	"""
+	return ''.join(random.choice(string.ascii_letters + string.digits) for x in range(size))
 
 def build_server_from_argparser(description=None, ServerClass=None, HandlerClass=None):
 	"""
@@ -319,7 +334,7 @@ class AdvancedHTTPServerRPCClient(object):
 		self.host = str(address[0])
 		self.port = int(address[1])
 		if not hasattr(self, 'logger'):
-			self.logger = logging.getLogger('AdvancedHTTPServerRPCClient')
+			self.logger = logging.getLogger('AdvancedHTTPServer.RPCClient')
 
 		self.use_ssl = bool(use_ssl)
 		self.uri_base = str(uri_base)
@@ -493,6 +508,12 @@ class AdvancedHTTPServerNonThreaded(BaseHTTPServer.HTTPServer, object):
 		self.robots_txt = 'User-agent: *\nDisallow: /\n'
 		self.server_version = 'HTTPServer/' + __version__
 		super(AdvancedHTTPServerNonThreaded, self).__init__(*args, **kwargs)
+
+	def finish_request(self, *args, **kwargs):
+		try:
+			super(AdvancedHTTPServerNonThreaded, self).finish_request(*args, **kwargs)
+		except IOError:
+			self.logger.warning('IOError encountered in finish_request')
 
 	def server_bind(self, *args, **kwargs):
 		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -1317,6 +1338,57 @@ class AdvancedHTTPServer(object):
 		if pwtype != 'plain':
 			password = password.lower()
 		self.http_server.basic_auth[username] = {'value': password, 'type': pwtype}
+
+class AdvancedHTTPServerTestCase(unittest.TestCase):
+	server_class = AdvancedHTTPServer
+	handler_class = AdvancedHTTPServerRequestHandler
+	config_section = 'server'
+	def setUp(self):
+		config = ConfigParser.ConfigParser()
+		config.add_section(self.config_section)
+		config.set(self.config_section, 'ip', '127.0.0.1')
+		config.set(self.config_section, 'port', str(random.randint(30000, 50000)))
+		self.config = config
+		self.test_resource = "/{0}".format(random_string(40))
+		AdvancedHTTPServerRegisterPath("^{0}$".format(self.test_resource[1:]), self.handler_class.__name__)(self._test_resource_handler)
+		self.server = build_server_from_config(self.config, self.config_section, self.server_class, self.handler_class)
+		self.assertIsInstance(self.server, AdvancedHTTPServer)
+		self.server_thread = threading.Thread(target=self.server.serve_forever)
+		self.server_thread.daemon = True
+		self.server_thread.start()
+		self.assertTrue(self.server_thread.is_alive())
+		self.shutdown_requested = False
+		self.http_connection = httplib.HTTPConnection(self.config.get(self.config_section, 'ip'), self.config.getint(self.config_section, 'port'))
+
+	def _test_resource_handler(self, handler, query):
+		handler.send_response(200)
+		handler.end_headers()
+		message = 'Hello World!\r\n\r\n'
+		handler.send_response(200)
+		handler.send_header('Content-Length', len(message))
+		handler.end_headers()
+		handler.wfile.write(message)
+		return
+
+	def assertHTTPStatus(self, http_response, status):
+		self.assertIsInstance(http_response, httplib.HTTPResponse)
+		error_message = "HTTP Response received status {0} when {1} was expected".format(http_response.status, status)
+		self.assertEqual(http_response.status, status, msg=error_message)
+
+	def http_request(self, resource, method='GET', headers=None):
+		headers = (headers or {})
+		self.http_connection.request(method, resource, headers=headers)
+		response = self.http_connection.getresponse()
+		return response
+
+	def tearDown(self):
+		if not self.shutdown_requested:
+			self.assertTrue(self.server_thread.is_alive())
+		self.http_connection.close()
+		self.server.shutdown()
+		self.server_thread.join(5.0)
+		self.assertFalse(self.server_thread.is_alive())
+		del self.server
 
 def main():
 	try:

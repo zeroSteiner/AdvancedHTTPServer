@@ -13,7 +13,7 @@
 #    copyright notice, this list of conditions and the following disclaimer
 #    in the documentation and/or other materials provided with the
 #    distribution.
-#  * Neither the name of the SecureState Consulting nor the names of its
+#  * Neither the name of the project nor the names of its
 #    contributors may be used to endorse or promote products derived from
 #    this software without specific prior written permission.
 #
@@ -45,12 +45,12 @@ class DemoHandler(AdvancedHTTPServerRequestHandler):
 		self.rpc_handler_map['/xor'] = self.rpc_xor
 
 	def res_hello_world(self, query):
-		message = 'Hello World!\n'
+		message = 'Hello World!\r\n\r\n'
 		self.send_response(200)
 		self.send_header('Content-Length', len(message))
 		self.end_headers()
 		if self.basic_auth_user:
-			self.wfile.write('Username: ' + self.basic_auth_user + '\n')
+			self.wfile.write('Username: ' + self.basic_auth_user + '\r\n')
 		self.wfile.write(message)
 		return
 
