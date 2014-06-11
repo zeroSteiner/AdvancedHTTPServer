@@ -1,4 +1,4 @@
-# AdvancedHTTPServer
+# AdvancedHTTPServer [![Build Status](https://travis-ci.org/zeroSteiner/AdvancedHTTPServer.png)](https://travis-ci.org/zeroSteiner/AdvancedHTTPServer)
 Micro web framework built on Python's BaseHTTPServer
 
 ## License
