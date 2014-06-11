@@ -1371,7 +1371,7 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 	def setUp(self):
 		AdvancedHTTPServerRegisterPath("^{0}$".format(self.test_resource[1:]), self.handler_class.__name__)(self._test_resource_handler)
 		self.server = build_server_from_config(self.config, self.config_section, self.server_class, self.handler_class)
-		self.assertIsInstance(self.server, AdvancedHTTPServer)
+		self.assertTrue(isinstance(self.server, AdvancedHTTPServer))
 		self.server_thread = threading.Thread(target=self.server.serve_forever)
 		self.server_thread.daemon = True
 		self.server_thread.start()
@@ -1397,7 +1397,7 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		:type http_response: :py:class:`httplib.HTTPResponse`
 		:param int status: The status code to expect for *http_response*.
 		"""
-		self.assertIsInstance(http_response, httplib.HTTPResponse)
+		self.assertTrue(isinstance(http_response, httplib.HTTPResponse))
 		error_message = "HTTP Response received status {0} when {1} was expected".format(http_response.status, status)
 		self.assertEqual(http_response.status, status, msg=error_message)
 
