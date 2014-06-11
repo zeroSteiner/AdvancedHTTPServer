@@ -129,7 +129,8 @@ if hasattr(logging, 'NullHandler'):
 def random_string(size):
 	"""
 	Generate a random string of *size* length consisting of both letters
-	and numbers.
+	and numbers. This function is not meant for cryptographic purposes
+	and should not be used to generate security tokens.
 
 	:param int size: The length of the string to return.
 	:return: A string consisting of random characters.
@@ -1340,16 +1341,34 @@ class AdvancedHTTPServer(object):
 		self.http_server.basic_auth[username] = {'value': password, 'type': pwtype}
 
 class AdvancedHTTPServerTestCase(unittest.TestCase):
+	"""
+	A base class for unit tests with AdvancedHTTPServer derived classes.
+	"""
 	server_class = AdvancedHTTPServer
+	"""The :py:class:`.AdvancedHTTPServer` class to use as the server, this can be overridden by subclasses."""
 	handler_class = AdvancedHTTPServerRequestHandler
+	"""The :py:class:`.AdvancedHTTPServerRequestHandler` class to use as the request handler, this can be overridden by subclasses."""
 	config_section = 'server'
-	def setUp(self):
+	"""The name of the :py:class:`ConfigParser.ConfigParser` section that the server is using."""
+	def __init__(self, *args, **kwargs):
+		super(AdvancedHTTPServerTestCase, self).__init__(*args, **kwargs)
 		config = ConfigParser.ConfigParser()
 		config.add_section(self.config_section)
 		config.set(self.config_section, 'ip', '127.0.0.1')
 		config.set(self.config_section, 'port', str(random.randint(30000, 50000)))
 		self.config = config
+		"""
+		The :py:class:`ConfigParser.ConfigParser` object used by the server.
+		It has the ip and port options configured in the section named in
+		the :py:attr:`.config_section` attribute.
+		"""
 		self.test_resource = "/{0}".format(random_string(40))
+		"""
+		A resource which has a handler set to it which will respond with
+		a 200 status code and the message 'Hello World!'
+		"""
+
+	def setUp(self):
 		AdvancedHTTPServerRegisterPath("^{0}$".format(self.test_resource[1:]), self.handler_class.__name__)(self._test_resource_handler)
 		self.server = build_server_from_config(self.config, self.config_section, self.server_class, self.handler_class)
 		self.assertIsInstance(self.server, AdvancedHTTPServer)
@@ -1371,11 +1390,27 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		return
 
 	def assertHTTPStatus(self, http_response, status):
+		"""
+		Check an HTTP response object and ensure the status is correct.
+
+		:param http_response: The response object to check.
+		:type http_response: :py:class:`httplib.HTTPResponse`
+		:param int status: The status code to expect for *http_response*.
+		"""
 		self.assertIsInstance(http_response, httplib.HTTPResponse)
 		error_message = "HTTP Response received status {0} when {1} was expected".format(http_response.status, status)
 		self.assertEqual(http_response.status, status, msg=error_message)
 
 	def http_request(self, resource, method='GET', headers=None):
+		"""
+		Make an HTTP request to the test server and return the response.
+
+		:param str resource: The resource to issue the request to.
+		:param str method: The HTTP verb to use (GET, HEAD, POST etc.).
+		:param dict headers: The HTTP headers to provide in the request.
+		:return: The HTTP response object.
+		:rtype: :py:class:`httplib.HTTPResponse`
+		"""
 		headers = (headers or {})
 		self.http_connection.request(method, resource, headers=headers)
 		response = self.http_connection.getresponse()

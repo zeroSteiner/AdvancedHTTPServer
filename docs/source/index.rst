@@ -25,6 +25,8 @@ Functions
 
 .. autofunction:: AdvancedHTTPServer.build_server_from_config
 
+.. autofunction:: AdvancedHTTPServer.random_string
+
 Classes
 -------
 
@@ -54,6 +56,9 @@ Classes
 .. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerRPCClientCached
    :members:
    :undoc-members:
+
+.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerTestCase
+   :members:
 
 Exceptions
 ----------
