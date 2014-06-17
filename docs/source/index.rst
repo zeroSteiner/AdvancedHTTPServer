@@ -15,8 +15,7 @@ Data
 ----
 
 .. data:: SERIALIZER_DRIVERS
-
-   Dictionary of available drivers for serialization.
+   :annotation:
 
 Functions
 ---------

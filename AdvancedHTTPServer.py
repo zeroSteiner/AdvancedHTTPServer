@@ -111,6 +111,7 @@ except ImportError:
 
 GLOBAL_HANDLER_MAP = {}
 SERIALIZER_DRIVERS = {}
+"""Dictionary of available drivers for serialization."""
 SERIALIZER_DRIVERS['application/json'] = {'loads': json.loads, 'dumps': json.dumps}
 SERIALIZER_DRIVERS['binary/json'] = {'loads': json.loads, 'dumps': json.dumps}
 SERIALIZER_DRIVERS['binary/json+zlib'] = {'loads': lambda d: json.loads(zlib.decompress(d)), 'dumps': lambda d: zlib.compress(json.dumps(d))}
