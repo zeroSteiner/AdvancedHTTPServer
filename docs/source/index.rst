@@ -42,11 +42,6 @@ Classes
 .. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerRequestHandler
    :members:
 
-.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerRESTAPI
-   :members:
-   :special-members: __init__
-   :undoc-members:
-
 .. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerRPCClient
    :members:
    :special-members: __init__

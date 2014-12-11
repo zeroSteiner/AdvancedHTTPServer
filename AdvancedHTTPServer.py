@@ -65,24 +65,20 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.3.1'
+__version__ = '0.3.2'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
 	'AdvancedHTTPServerRequestHandler',
-	'AdvancedHTTPServerRESTAPI',
 	'AdvancedHTTPServerRPCClient',
 	'AdvancedHTTPServerRPCError'
 ]
 
-import BaseHTTPServer
 import cgi
-import ConfigParser
-import Cookie
 import datetime
 import hashlib
 import hmac
-import httplib
+import io
 import json
 import logging
 import logging.handlers
@@ -93,7 +89,6 @@ import random
 import re
 import shutil
 import socket
-import SocketServer
 import sqlite3
 import ssl
 import string
@@ -102,13 +97,26 @@ import threading
 import traceback
 import unittest
 import urllib
-import urlparse
 import zlib
 
-try:
-	from cStringIO import StringIO
-except ImportError:
-	from StringIO import StringIO
+if sys.version_info[0] < 3:
+	import BaseHTTPServer
+	import Cookie
+	import httplib
+	import SocketServer as socketserver
+	import urlparse
+	http = type('http', (), {'client': httplib, 'cookies': Cookie, 'server': BaseHTTPServer})
+	urllib.parse = urlparse
+	urllib.parse.quote = urllib.quote
+	urllib.parse.unquote = urllib.unquote
+	from ConfigParser import ConfigParser
+else:
+	import http.client
+	import http.cookies
+	import http.server
+	import socketserver
+	import urllib.parse
+	from configparser import ConfigParser
 
 GLOBAL_HANDLER_MAP = {}
 
@@ -183,7 +191,6 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 	:rtype: :py:class:`.AdvancedHTTPServer`
 	"""
 	import argparse
-	import ConfigParser
 
 	description = (description or 'AdvancedHTTPServer')
 	ServerClass = (ServerClass or AdvancedHTTPServer)
@@ -215,7 +222,7 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 		logging.getLogger('').addHandler(main_file_handler)
 
 	if arguments.config:
-		config = ConfigParser.ConfigParser()
+		config = ConfigParser()
 		config.readfp(arguments.config)
 		server = build_server_from_config(config, 'server', ServerClass=ServerClass, HandlerClass=HandlerClass)
 	else:
@@ -228,13 +235,13 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 
 def build_server_from_config(config, section_name, ServerClass=None, HandlerClass=None):
 	"""
-	Build a server from a provided :py:class:`ConfigParser.ConfigParser`
+	Build a server from a provided :py:class:`configparser.ConfigParser`
 	instance. If a ServerClass or HandlerClass is specified, then the
 	object must inherit from the corresponding AdvancedHTTPServer base
 	class.
 
 	:param config: Configuration to retrieve settings from.
-	:type config: :py:class:`ConfigParser.ConfigParser`
+	:type config: :py:class:`configparser.ConfigParser`
 	:param str section_name: The section name of the configuration to use.
 	:param ServerClass: Alternative server class to use.
 	:type ServerClass: :py:class:`.AdvancedHTTPServer`
@@ -310,7 +317,7 @@ class AdvancedHTTPServerRegisterPath(object):
 		:param str handler: A specific :py:class:`.AdvancedHTTPServerRequestHandler` class to register the handler with.
 		"""
 		self.path = path
-		if handler == None or isinstance(handler, (str, unicode)):
+		if handler == None or isinstance(handler, str):
 			self.handler = handler
 		elif hasattr(handler, '__name__'):
 			self.handler = handler.__name__
@@ -413,9 +420,9 @@ class AdvancedHTTPServerRPCClient(object):
 		"""Reconnect to the remote server."""
 		self.lock.acquire()
 		if self.use_ssl:
-			self.client = httplib.HTTPSConnection(self.host, self.port)
+			self.client = http.client.HTTPSConnection(self.host, self.port)
 		else:
-			self.client = httplib.HTTPConnection(self.host, self.port)
+			self.client = http.client.HTTPConnection(self.host, self.port)
 		self.lock.release()
 
 	def call(self, method, *options):
@@ -525,7 +532,7 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		self.logger.info('the RPC cache has been clared')
 		return
 
-class AdvancedHTTPServerNonThreaded(BaseHTTPServer.HTTPServer, object):
+class AdvancedHTTPServerNonThreaded(http.server.HTTPServer, object):
 	"""
 	This class is used internally by :py:class:`.AdvancedHTTPServer` and
 	is not intended for use by other classes or functions.
@@ -559,14 +566,14 @@ class AdvancedHTTPServerNonThreaded(BaseHTTPServer.HTTPServer, object):
 		super(AdvancedHTTPServerNonThreaded, self).shutdown(*args, **kwargs)
 		self.socket.close()
 
-class AdvancedHTTPServerThreaded(SocketServer.ThreadingMixIn, AdvancedHTTPServerNonThreaded):
+class AdvancedHTTPServerThreaded(socketserver.ThreadingMixIn, AdvancedHTTPServerNonThreaded):
 	"""
 	This class is used internally by :py:class:`.AdvancedHTTPServer` and
 	is not intended for use by other classes or functions.
 	"""
 	pass
 
-class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, object):
+class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, object):
 	"""
 	This is the primary http request handler class of the
 	AdvancedHTTPServer framework. Custom request handlers must inherit
@@ -595,9 +602,6 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.rpc_handler_map = {}
 		self.server = args[2]
 		self.headers_active = False
-		rest_api_handler = self.server.rest_api_handler
-		if rest_api_handler:
-			self.handler_map[rest_api_handler.api_path_regex] = rest_api_handler.dispatch_handler
 		for map_name in (None, self.__class__.__name__):
 			handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
 			for path, function in handler_map.items():
@@ -660,12 +664,13 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		if os.path.normpath(dir_path) != self.server.serve_files_root:
 			dir_contents.append('..')
 		dir_contents.sort(key=lambda a: a.lower())
-		f = StringIO()
-		displaypath = cgi.escape(urllib.unquote(self.path))
-		f.write('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">\n')
-		f.write('<html>\n<title>Directory listing for ' + displaypath + '</title>\n')
-		f.write('<body>\n<h2>Directory listing for ' + displaypath + '</h2>\n')
-		f.write('<hr>\n<ul>\n')
+		f = io.BytesIO()
+		encoding = sys.getfilesystemencoding()
+		displaypath = cgi.escape(urllib.parse.unquote(self.path))
+		f.write(bytes('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">\n', encoding))
+		f.write(bytes('<html>\n<title>Directory listing for ' + displaypath + '</title>\n', encoding))
+		f.write(bytes('<body>\n<h2>Directory listing for ' + displaypath + '</h2>\n', encoding))
+		f.write(bytes('<hr>\n<ul>\n', encoding))
 		for name in dir_contents:
 			fullname = os.path.join(dir_path, name)
 			displayname = linkname = name
@@ -676,12 +681,12 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			if os.path.islink(fullname):
 				displayname = name + "@"
 				# Note: a link to a directory displays with @ and links with /
-			f.write('<li><a href="' + urllib.quote(linkname) + '">' + cgi.escape(displayname) + '</a>\n')
-		f.write('</ul>\n<hr>\n</body>\n</html>\n')
+			f.write(bytes('<li><a href="' + urllib.parse.quote(linkname) + '">' + cgi.escape(displayname) + '</a>\n', encoding))
+		f.write(bytes('</ul>\n<hr>\n</body>\n</html>\n', encoding))
 		length = f.tell()
 		f.seek(0)
+
 		self.send_response(200)
-		encoding = sys.getfilesystemencoding()
 		self.send_header('Content-Type', 'text/html; charset=' + encoding)
 		self.send_header('Content-Length', str(length))
 		self.end_headers()
@@ -694,7 +699,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		self.send_response(404)
 		self.send_header('Content-Type', 'text/html')
 		self.end_headers()
-		self.wfile.write('Resource Not Found\n')
+		self.wfile.write(b'Resource Not Found\n')
 		return
 
 	def respond_redirect(self, location='/'):
@@ -725,13 +730,16 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			log_msg = "encountered {0} in {1}".format(repr(ex_value), line_info)
 			self.server.logger.error(log_msg)
 		status = (status or 500)
-		status_line = (status_line or httplib.responses.get(status, 'Internal Server Error')).strip()
+		status_line = (status_line or http.client.responses.get(status, 'Internal Server Error')).strip()
 		self.send_response(status, status_line)
 		message = (message or status_line)
-		if isinstance(message, (str, unicode)):
+		if isinstance(message, (str, bytes)):
 			self.send_header('Content-Length', len(message))
 			self.end_headers()
-			self.wfile.write(message)
+			if isinstance(message, str):
+				self.wfile.write(message, sys.getdefaultencoding())
+			else:
+				self.wfile.write(message)
 		elif hasattr(message, 'fileno'):
 			fs = os.fstat(message.fileno())
 			self.send_header('Content-Length', str(fs[6]))
@@ -752,7 +760,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			self.send_header('WWW-Authenticate', 'Basic realm="' + self.server_version + '"')
 		self.send_header('Content-Type', 'text/html')
 		self.end_headers()
-		self.wfile.write('Unauthorized\n')
+		self.wfile.write(b'Unauthorized\n')
 		return
 
 	def dispatch_handler(self, query=None):
@@ -770,7 +778,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		# abandon query parameters
 		self.path = self.path.split('?', 1)[0]
 		self.path = self.path.split('#', 1)[0]
-		self.original_path = urllib.unquote(self.path)
+		self.original_path = urllib.parse.unquote(self.path)
 		self.path = posixpath.normpath(self.original_path)
 		words = self.path.split('/')
 		words = filter(None, words)
@@ -790,7 +798,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			self.wfile.write(self.server.robots_txt)
 			return
 
-		self.cookies = Cookie.SimpleCookie(self.headers.get('cookie', ''))
+		self.cookies = http.cookies.SimpleCookie(self.headers.get('cookie', ''))
 		for (path_regex, handler) in self.handler_map.items():
 			if re.match(path_regex, self.path):
 				try:
@@ -946,9 +954,9 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 		if not self.check_authorization():
 			self.respond_unauthorized(request_authentication=True)
 			return
-		uri = urlparse.urlparse(self.path)
+		uri = urllib.parse.urlparse(self.path)
 		self.path = uri.path
-		self.query_data = urlparse.parse_qs(uri.query)
+		self.query_data = urllib.parse.parse_qs(uri.query)
 
 		self.dispatch_handler(self.query_data)
 		return
@@ -972,7 +980,7 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 				if isinstance(data, dict):
 					self.query_data = dict(map(lambda i: (i[0], [i[1]]), data.items()))
 			else:
-				self.query_data = urlparse.parse_qs(data, keep_blank_values=1)
+				self.query_data = urllib.parse.parse_qs(data, keep_blank_values=1)
 		except:
 			self.respond_server_error(400)
 		else:
@@ -1072,6 +1080,8 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 			hmac_calculator.update(response)
 			self.send_header('HMAC', hmac_calculator.hexdigest())
 		self.end_headers()
+		if isinstance(response, str):
+			response = bytes(response, sys.getdefaultencoding())
 		self.wfile.write(response)
 		return
 
@@ -1080,81 +1090,6 @@ class AdvancedHTTPServerRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler, ob
 
 	def log_message(self, format, *args):
 		self.server.logger.info(self.address_string() + ' ' + format % args)
-
-class AdvancedHTTPServerRESTAPI(object):
-	"""
-	This is a manager REST request handlers. It allows them to be grouped
-	together and to use a common base path, '/api/' by default. Handler
-	functions that are not class methods will be passed the instance of
-	the managing class as the first argument.
-	"""
-	def __init__(self, api_path='/api/'):
-		"""
-		:param str api_path: A base path to be prefixed to all handlers.
-		"""
-		self.api_path = api_path
-		self.handler_map = {}
-		map_name = self.__class__.__name__
-		handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
-		for path, function in handler_map.items():
-			self.handler_map[path] = function
-		self.install_handlers()
-
-	@property
-	def api_path_regex(self):
-		return '^' + self.api_path.strip('/') + '/\S'
-
-	def install_handlers(self):
-		"""
-		This method is meant to be over ridden by custom classes. It is
-		called as part of the __init__ method and provides an opportunity
-		for the handler maps to be populated with entries.
-		"""
-		pass # over ride me
-
-	def dispatch_handler(self, request_handler, query):
-		"""
-		Dispatch functions based on the established handler_map. It is
-		generally not necessary to override this function and doing so
-		will prevent any handlers from being executed. This function is
-		executed automatically when requests are received that being with
-		the specified api base path.
-
-		:param dict query: Parsed query parameters from the corresponding request.
-		"""
-		path = request_handler.path
-		prefix_len = len(re.match(self.api_path_regex, path).group(0)) - 1
-		path = path[prefix_len:]
-		handler_found = False
-		result = None
-		arguments = query
-		if isinstance(arguments, (dict)):
-			arguments = dict(map(lambda i: (i[0], i[1][-1]), query.items()))
-		elif not isinstance(arguments, (list, tuple)):
-			arguments = [arguments]
-		for (path_regex, handler) in self.handler_map.items():
-			if re.match(path_regex, path):
-				handler_found = True
-				if hasattr(self, handler.__name__) and (handler == getattr(self, handler.__name__).__func__ or handler == getattr(self, handler.__name__)):
-					if isinstance(arguments, dict):
-						result = getattr(self, handler.__name__)(**arguments)
-					else:
-						result = getattr(self, handler.__name__)(*arguments)
-				else:
-					if isinstance(arguments, dict):
-						result = handler(self, **arguments)
-					else:
-						result = handler(self, *arguments)
-				break
-		if not handler_found:
-			request_handler.respond_server_error(501)
-			return
-		result = json.dumps(result) + '\n'
-		request_handler.send_response(200)
-		request_handler.send_header('Content-Type', 'application/json')
-		request_handler.send_header('Content-Length', len(result))
-		request_handler.end_headers()
-		request_handler.wfile.write(result)
 
 class AdvancedHTTPServer(object):
 	"""
@@ -1197,7 +1132,6 @@ class AdvancedHTTPServer(object):
 		else:
 			self.http_server = AdvancedHTTPServerNonThreaded(address, RequestHandler)
 		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
-		self.http_server.rest_api_handler = None
 
 		if self.use_ssl:
 			self.http_server.socket = ssl.wrap_socket(self.http_server.socket, keyfile=ssl_keyfile, certfile=ssl_certfile, server_side=True)
@@ -1207,18 +1141,6 @@ class AdvancedHTTPServer(object):
 		if hasattr(RequestHandler, 'custom_authentication'):
 			self.logger.debug(address[0] + ':' + str(address[1]) + ' - a custom authentication function is being used')
 			self.auth_set(True)
-
-	def init_rest_api(self, rest_api_handler):
-		"""
-		Initialize a REST API Handler.
-
-		:param rest_api_handler: The handler instance to register with the server.
-		:type rest_api_handler: :py:class:`.AdvancedHTTPServerRESTAPI`
-		"""
-		if not isinstance(rest_api_handler, AdvancedHTTPServerRESTAPI):
-			raise ValueError('rest_api_handler must be an instance of AdvancedHTTPServerRESTAPI')
-		self.http_server.rest_api_handler = rest_api_handler
-		self.logger.debug(self.address[0] + ':' + str(self.address[1]) + ' - a REST API handler has been registered')
 
 	def serve_forever(self, fork=False):
 		"""
@@ -1386,16 +1308,16 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 	handler_class = AdvancedHTTPServerRequestHandler
 	"""The :py:class:`.AdvancedHTTPServerRequestHandler` class to use as the request handler, this can be overridden by subclasses."""
 	config_section = 'server'
-	"""The name of the :py:class:`ConfigParser.ConfigParser` section that the server is using."""
+	"""The name of the :py:class:`configparser.ConfigParser` section that the server is using."""
 	def __init__(self, *args, **kwargs):
 		super(AdvancedHTTPServerTestCase, self).__init__(*args, **kwargs)
-		config = ConfigParser.ConfigParser()
+		config = ConfigParser()
 		config.add_section(self.config_section)
 		config.set(self.config_section, 'ip', '127.0.0.1')
 		config.set(self.config_section, 'port', str(random.randint(30000, 50000)))
 		self.config = config
 		"""
-		The :py:class:`ConfigParser.ConfigParser` object used by the server.
+		The :py:class:`configparser.ConfigParser` object used by the server.
 		It has the ip and port options configured in the section named in
 		the :py:attr:`.config_section` attribute.
 		"""
@@ -1414,7 +1336,7 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		self.server_thread.start()
 		self.assertTrue(self.server_thread.is_alive())
 		self.shutdown_requested = False
-		self.http_connection = httplib.HTTPConnection(self.config.get(self.config_section, 'ip'), self.config.getint(self.config_section, 'port'))
+		self.http_connection = http.client.HTTPConnection(self.config.get(self.config_section, 'ip'), self.config.getint(self.config_section, 'port'))
 
 	def _test_resource_handler(self, handler, query):
 		handler.send_response(200)
@@ -1431,10 +1353,10 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		Check an HTTP response object and ensure the status is correct.
 
 		:param http_response: The response object to check.
-		:type http_response: :py:class:`httplib.HTTPResponse`
+		:type http_response: :py:class:`http.client.HTTPResponse`
 		:param int status: The status code to expect for *http_response*.
 		"""
-		self.assertTrue(isinstance(http_response, httplib.HTTPResponse))
+		self.assertTrue(isinstance(http_response, http.client.HTTPResponse))
 		error_message = "HTTP Response received status {0} when {1} was expected".format(http_response.status, status)
 		self.assertEqual(http_response.status, status, msg=error_message)
 
@@ -1446,7 +1368,7 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		:param str method: The HTTP verb to use (GET, HEAD, POST etc.).
 		:param dict headers: The HTTP headers to provide in the request.
 		:return: The HTTP response object.
-		:rtype: :py:class:`httplib.HTTPResponse`
+		:rtype: :py:class:`http.client.HTTPResponse`
 		"""
 		headers = (headers or {})
 		self.http_connection.request(method, resource, headers=headers)
