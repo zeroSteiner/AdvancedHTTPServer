@@ -74,6 +74,7 @@ __all__ = [
 	'AdvancedHTTPServerRPCError'
 ]
 
+import base64
 import cgi
 import datetime
 import hashlib
@@ -94,6 +95,7 @@ import ssl
 import string
 import sys
 import threading
+import time
 import traceback
 import unittest
 import urllib
@@ -664,13 +666,14 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		if os.path.normpath(dir_path) != self.server.serve_files_root:
 			dir_contents.append('..')
 		dir_contents.sort(key=lambda a: a.lower())
+		displaypath = cgi.escape(urllib.parse.unquote(self.path))
+
 		f = io.BytesIO()
 		encoding = sys.getfilesystemencoding()
-		displaypath = cgi.escape(urllib.parse.unquote(self.path))
-		f.write(bytes('<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">\n', encoding))
-		f.write(bytes('<html>\n<title>Directory listing for ' + displaypath + '</title>\n', encoding))
-		f.write(bytes('<body>\n<h2>Directory listing for ' + displaypath + '</h2>\n', encoding))
-		f.write(bytes('<hr>\n<ul>\n', encoding))
+		f.write(b'<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 3.2 Final//EN">\n')
+		f.write(b'<html>\n<title>Directory listing for ' + displaypath.encode(encoding) + b'</title>\n')
+		f.write(b'<body>\n<h2>Directory listing for ' + displaypath.encode(encoding) + b'</h2>\n')
+		f.write(b'<hr>\n<ul>\n')
 		for name in dir_contents:
 			fullname = os.path.join(dir_path, name)
 			displayname = linkname = name
@@ -681,8 +684,8 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			if os.path.islink(fullname):
 				displayname = name + "@"
 				# Note: a link to a directory displays with @ and links with /
-			f.write(bytes('<li><a href="' + urllib.parse.quote(linkname) + '">' + cgi.escape(displayname) + '</a>\n', encoding))
-		f.write(bytes('</ul>\n<hr>\n</body>\n</html>\n', encoding))
+			f.write(('<li><a href="' + urllib.parse.quote(linkname) + '">' + cgi.escape(displayname) + '</a>\n').encode(encoding))
+		f.write(b'</ul>\n<hr>\n</body>\n</html>\n')
 		length = f.tell()
 		f.seek(0)
 
@@ -737,7 +740,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			self.send_header('Content-Length', len(message))
 			self.end_headers()
 			if isinstance(message, str):
-				self.wfile.write(message, sys.getdefaultencoding())
+				self.wfile.write(message.encode(sys.getdefaultencoding()))
 			else:
 				self.wfile.write(message)
 		elif hasattr(message, 'fileno'):
@@ -885,7 +888,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		try:
 			if self.server.basic_auth == None:
 				return True
-			auth_info = self.headers.getheader('Authorization')
+			auth_info = self.headers.get('Authorization')
 			if not auth_info:
 				return False
 			auth_info = auth_info.split()
@@ -894,9 +897,10 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			if auth_info[0] != 'Basic':
 				return False
 
-			auth_info = auth_info[1].decode('base64')
+			auth_info = base64.b64decode(auth_info[1]).decode(sys.getdefaultencoding())
 			username = auth_info.split(':')[0]
 			password = ':'.join(auth_info.split(':')[1:])
+			password_bytes = password.encode(sys.getdefaultencoding())
 			if hasattr(self, 'custom_authentication'):
 				if self.custom_authentication(username, password):
 					self.basic_auth_user = username
@@ -912,11 +916,11 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 					self.basic_auth_user = username
 					return True
 			elif password_data['type'] == 'md5':
-				if hashlib.new('md5', password).hexdigest() == password_data['value']:
+				if hashlib.new('md5', password_bytes).hexdigest() == password_data['value']:
 					self.basic_auth_user = username
 					return True
 			elif password_data['type'] == 'sha1':
-				if hashlib.new('sha1', password).hexdigest() == password_data['value']:
+				if hashlib.new('sha1', password_bytes).hexdigest() == password_data['value']:
 					self.basic_auth_user = username
 					return True
 			self.server.logger.warning('received invalid password from user: ' + username)
@@ -968,10 +972,10 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		if not self.check_authorization():
 			self.respond_unauthorized(request_authentication=True)
 			return
-		content_length = int(self.headers.getheader('content-length') or 0)
+		content_length = int(self.headers.get('content-length', 0))
 		data = self.rfile.read(content_length)
 		self.query_data_raw = data
-		content_type = self.headers.getheader('content-type') or ''
+		content_type = self.headers.get('content-type', '')
 		content_type = content_type.split(';', 1)[0]
 		self.query_data = {}
 		try:
@@ -1000,12 +1004,12 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			self.respond_unauthorized(request_authentication=True)
 			return
 
-		data_length = self.headers.getheader('content-length')
-		if self.headers.getheader('content-length') == None:
+		data_length = self.headers.get('content-length')
+		if data_length == None:
 			self.send_error(411)
 			return
 
-		data_type = self.headers.getheader('content-type')
+		data_type = self.headers.get('content-type')
 		if data_type == None:
 			self.send_error(400, 'Missing Header: Content-Type')
 			return
@@ -1016,14 +1020,14 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		serializer = SERIALIZER_DRIVERS[data_type]
 
 		try:
-			data_length = int(self.headers.getheader('content-length'))
+			data_length = int(self.headers.get('content-length'))
 			data = self.rfile.read(data_length)
 		except:
 			self.send_error(400, 'Invalid Data')
 			return
 
 		if self.server.rpc_hmac_key != None:
-			hmac_digest = self.headers.getheader('hmac')
+			hmac_digest = self.headers.get('hmac')
 			if not isinstance(hmac_digest, str):
 				self.respond_unauthorized(request_authentication=True)
 				return
@@ -1081,7 +1085,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			self.send_header('HMAC', hmac_calculator.hexdigest())
 		self.end_headers()
 		if isinstance(response, str):
-			response = bytes(response, sys.getdefaultencoding())
+			response = response.encode(sys.getdefaultencoding())
 		self.wfile.write(response)
 		return
 
@@ -1341,7 +1345,7 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 	def _test_resource_handler(self, handler, query):
 		handler.send_response(200)
 		handler.end_headers()
-		message = 'Hello World!\r\n\r\n'
+		message = b'Hello World!\r\n\r\n'
 		handler.send_response(200)
 		handler.send_header('Content-Length', len(message))
 		handler.end_headers()
@@ -1372,6 +1376,7 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		"""
 		headers = (headers or {})
 		self.http_connection.request(method, resource, headers=headers)
+		time.sleep(0.025)
 		response = self.http_connection.getresponse()
 		return response
 

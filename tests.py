@@ -30,6 +30,8 @@
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+import base64
+import hashlib
 import logging
 import os
 import unittest
@@ -43,26 +45,36 @@ else:
 logging.getLogger('AdvancedHTTPServer').addHandler(null_handler)
 
 class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
-	def test_authentication(self):
-		username = random_string(8)
-		password = random_string(12)
-		self.server.auth_add_creds(username, password)
+	def _test_authentication(self, username, password):
 		response = self.http_request(self.test_resource, 'GET')
 		self.assertHTTPStatus(response, 401)
 		response = self.http_request(self.test_resource, 'HEAD')
 		self.assertHTTPStatus(response, 401)
 		response = self.http_request(self.test_resource, 'POST')
 		self.assertHTTPStatus(response, 401)
-		auth_headers = {'Authorization': 'Basic ' + "{0}:{1}".format(username, password).encode('base64')}
+		auth_headers = {'Authorization': 'Basic ' + base64.b64encode("{0}:{1}".format(username, password).encode('utf-8')).decode('utf-8')}
 		response = self.http_request(self.test_resource, 'GET', headers=auth_headers)
 		self.assertHTTPStatus(response, 200)
 		self.server.auth_set(False)
 		response = self.http_request(self.test_resource, 'GET')
 		self.assertHTTPStatus(response, 200)
 
+	def test_authentication_hash(self):
+		username = random_string(8)
+		password = random_string(12)
+		password_hash = hashlib.new('md5', password.encode('utf-8')).hexdigest()
+		self.server.auth_add_creds(username, password_hash, 'md5')
+		self._test_authentication(username, password)
+
+	def test_authentication_plain(self):
+		username = random_string(8)
+		password = random_string(12)
+		self.server.auth_add_creds(username, password)
+		self._test_authentication(username, password)
+
 	def test_authentication_bad_credentials(self):
 		self.server.auth_add_creds(random_string(8), random_string(12))
-		auth_headers = {'Authorization': 'Basic ' + "{0}:{1}".format(random_string(8), random_string(12)).encode('base64')}
+		auth_headers = {'Authorization': 'Basic ' + base64.b64encode("{0}:{1}".format(random_string(8), random_string(12)).encode('utf-8')).decode('utf-8')}
 		response = self.http_request(self.test_resource, 'GET', headers=auth_headers)
 		self.assertHTTPStatus(response, 401)
 
@@ -79,7 +91,8 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 	def test_verb_get(self):
 		response = self.http_request(self.test_resource, 'GET')
 		self.assertHTTPStatus(response, 200)
-		self.assertTrue('Hello World!' in response.read())
+		response_data = response.read()
+		self.assertTrue(b'Hello World!' in response_data)
 
 	def test_verb_head(self):
 		response = self.http_request(self.test_resource, 'HEAD')
