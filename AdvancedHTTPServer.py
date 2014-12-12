@@ -71,7 +71,9 @@ __all__ = [
 	'AdvancedHTTPServerRegisterPath',
 	'AdvancedHTTPServerRequestHandler',
 	'AdvancedHTTPServerRPCClient',
-	'AdvancedHTTPServerRPCError'
+	'AdvancedHTTPServerRPCClientCached',
+	'AdvancedHTTPServerRPCError',
+	'AdvancedHTTPServerTestCase'
 ]
 
 import base64
@@ -139,8 +141,6 @@ def _json_object_hook(obj):
 SERIALIZER_DRIVERS = {}
 """Dictionary of available drivers for serialization."""
 SERIALIZER_DRIVERS['application/json'] = {'loads': lambda d: json.loads(d, object_hook=_json_object_hook), 'dumps': lambda d: json.dumps(d, default=_json_default)}
-SERIALIZER_DRIVERS['binary/json'] = SERIALIZER_DRIVERS['application/json']
-SERIALIZER_DRIVERS['binary/json+zlib'] = {'loads': lambda d: json.loads(zlib.decompress(d, object_hook=_json_object_hook)), 'dumps': lambda d: zlib.compress(json.dumps(d, default=_json_default))}
 
 try:
 	import msgpack
@@ -159,9 +159,8 @@ else:
 			else:
 				return datetime.datetime.strptime(data, '%Y-%m-%dT%H:%M:%S')
 		return msfpack.ExtType(code, data)
-
 	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads': lambda d: msgpack.loads(d, ext_hook=_msgpack_ext_hook), 'dumps': lambda d: msgpack.dumps(d, default=_msgpack_default)}
-	SERIALIZER_DRIVERS['binary/message-pack+zlib'] = {'loads': lambda d: msgpack.loads(zlib.decompress(d), ext_hook=_msgpack_ext_hook), 'dumps': lambda d: zlib.compress(msgpack.dumps(d, default=_msgpack_default))}
+
 
 if hasattr(logging, 'NullHandler'):
 	logging.getLogger('AdvancedHTTPServer').addHandler(logging.NullHandler())
@@ -313,12 +312,14 @@ class AdvancedHTTPServerRegisterPath(object):
 	  def handle_test(handler, query):
 	      pass
 	"""
-	def __init__(self, path, handler=None):
+	def __init__(self, path, handler=None, is_rpc=False):
 		"""
 		:param str path: The path regex to register the function to.
 		:param str handler: A specific :py:class:`.AdvancedHTTPServerRequestHandler` class to register the handler with.
+		:param bool is_rpc: Whether the handler is an RPC handler or not.
 		"""
 		self.path = path
+		self.is_rpc = is_rpc
 		if handler == None or isinstance(handler, str):
 			self.handler = handler
 		elif hasattr(handler, '__name__'):
@@ -330,7 +331,7 @@ class AdvancedHTTPServerRegisterPath(object):
 
 	def __call__(self, function):
 		handler_map = GLOBAL_HANDLER_MAP.get(self.handler, {})
-		handler_map[self.path] = function
+		handler_map[self.path] = (function, self.is_rpc)
 		GLOBAL_HANDLER_MAP[self.handler] = handler_map
 		return function
 
@@ -345,7 +346,12 @@ class AdvancedHTTPServerRPCError(Exception):
 		self.remote_exception = remote_exception
 
 	def __repr__(self):
-		return "{0}(remote_exception={1})".format(self.__class__.__name__, self.is_remote_exception)
+		return "{0}(message='{1}', status={2}, remote_exception={3})".format(self.__class__.__name__, self.message, self.status, self.is_remote_exception)
+
+	def __str__(self):
+		if self.is_remote_exception:
+			return 'a remote exception occurred'
+		return "the server responded with {0} '{1}'".format(self.status, self.message)
 
 	@property
 	def is_remote_exception(self):
@@ -383,28 +389,27 @@ class AdvancedHTTPServerRPCClient(object):
 		self.uri_base = str(uri_base)
 		self.username = (str(username) if username != None else None)
 		self.password = (str(password) if password != None else None)
-		self.hmac_key = (str(hmac_key) if hmac_key != None else None)
+		if isinstance(hmac_key, str):
+			hmac_key = hmac_key.encode('UTF-8')
+		self.hmac_key = hmac_key
 		self.lock = threading.RLock()
-		self.serializer_name = SERIALIZER_DRIVERS.keys()[-1]
-		self.serializer = SERIALIZER_DRIVERS[self.serializer_name]
+		self.set_serializer('application/json')
 		self.reconnect()
 
 	def __reduce__(self):
 		address = (self.host, self.port)
 		return (self.__class__, (address, self.use_ssl, self.username, self.password, self.uri_base, self.hmac_key))
 
-	def set_serializer(self, serializer_name):
+	def set_serializer(self, serializer_name, compression=None):
 		"""
 		Configure the serializer to use for communication with the server.
 		The serializer specified must be valid and in the
 		:py:data:`.SERIALIZER_DRIVERS` map.
 
 		:param str serializer_name: The name of the serializer to use.
+		:param str compression: The name of a compression library to use.
 		"""
-		if not serializer_name in SERIALIZER_DRIVERS:
-			raise ValueError('unknown serializer: ' + serializer_name)
-		self.serializer = SERIALIZER_DRIVERS[serializer_name]
-		self.serializer_name = serializer_name
+		self.serializer = AdvancedHTTPServerSerializer(serializer_name, charset='UTF-8')
 		self.logger.debug('using serializer: ' + serializer_name)
 
 	def __call__(self, *args, **kwargs):
@@ -412,11 +417,11 @@ class AdvancedHTTPServerRPCClient(object):
 
 	def encode(self, data):
 		"""Encode data with the configured serializer."""
-		return self.serializer['dumps'](data)
+		return self.serializer.dumps(data)
 
 	def decode(self, data):
 		"""Decode data with the configured serializer."""
-		return self.serializer['loads'](data)
+		return self.serializer.loads(data)
 
 	def reconnect(self):
 		"""Reconnect to the remote server."""
@@ -438,7 +443,7 @@ class AdvancedHTTPServerRPCClient(object):
 		options = self.encode(options)
 
 		headers = {}
-		headers['Content-Type'] = self.serializer_name
+		headers['Content-Type'] = self.serializer.content_type
 		headers['Content-Length'] = str(len(options))
 
 		if self.hmac_key != None:
@@ -447,7 +452,7 @@ class AdvancedHTTPServerRPCClient(object):
 			headers['HMAC'] = hmac_calculator.hexdigest()
 
 		if self.username != None and self.password != None:
-			headers['Authorization'] = 'Basic ' + (self.username + ':' + self.password).encode('base64').strip()
+			headers['Authorization'] = 'Basic ' + base64.b64encode((self.username + ':' + self.password).encode('UTF-8')).decode('UTF-8')
 
 		method = os.path.join(self.uri_base, method)
 		self.logger.debug('calling RPC method: ' + method[1:])
@@ -606,8 +611,12 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		self.headers_active = False
 		for map_name in (None, self.__class__.__name__):
 			handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
-			for path, function in handler_map.items():
-				self.handler_map[path] = function
+			for path, function_info in handler_map.items():
+				function, function_is_rpc = function_info
+				if function_is_rpc:
+					self.rpc_handler_map[path] = function
+				else:
+					self.handler_map[path] = function
 		self.install_handlers()
 
 		self.basic_auth_user = None
@@ -1009,15 +1018,10 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			self.send_error(411)
 			return
 
-		data_type = self.headers.get('content-type')
-		if data_type == None:
+		content_type = self.headers.get('content-type')
+		if content_type == None:
 			self.send_error(400, 'Missing Header: Content-Type')
 			return
-
-		if not data_type in SERIALIZER_DRIVERS:
-			self.send_error(400, 'Invalid Content-Type')
-			return
-		serializer = SERIALIZER_DRIVERS[data_type]
 
 		try:
 			data_length = int(self.headers.get('content-length'))
@@ -1040,10 +1044,13 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 				return
 
 		try:
-			data = serializer['loads'](data)
-			if type(data) == list:
-				data = tuple(data)
-			assert(type(data) == tuple)
+			serializer = AdvancedHTTPServerSerializer.build_from_content_type(content_type)
+		except ValueError:
+			self.send_error(400, 'Invalid Content-Type')
+			return
+
+		try:
+			data = serializer.loads(data)
 		except:
 			self.server.logger.warning('serializer failed to load data')
 			self.send_error(400, 'Invalid Data')
@@ -1072,13 +1079,13 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			self.server.logger.error('error: ' + error.__class__.__name__ + ' occurred while calling RPC method: ' + self.path)
 
 		try:
-			response = serializer['dumps'](response)
+			response = serializer.dumps(response)
 		except:
 			self.respond_server_error(message='Failed To Pack Response')
 			return
 
 		self.send_response(200)
-		self.send_header('Content-Type', data_type)
+		self.send_header('Content-Type', serializer.content_type)
 		if self.server.rpc_hmac_key != None:
 			hmac_calculator = hmac.new(self.server.rpc_hmac_key, digestmod=hashlib.sha1)
 			hmac_calculator.update(response)
@@ -1094,6 +1101,57 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 
 	def log_message(self, format, *args):
 		self.server.logger.info(self.address_string() + ' ' + format % args)
+
+class AdvancedHTTPServerSerializer(object):
+	def __init__(self, name, charset='UTF-8', compression=None):
+		if not name in SERIALIZER_DRIVERS:
+			raise ValueError("unknown serializer '{0}'".format(name))
+		self.name = name
+		self._charset = charset
+		self._compression = compression
+		self.content_type = "{0}; charset={1}".format(self.name, self._charset)
+		if self._compression:
+			self.content_type += '; compression=' + self._compression
+
+	def dumps(self, data):
+		data = SERIALIZER_DRIVERS[self.name]['dumps'](data)
+		if isinstance(data, str):
+			data = data.encode(self._charset)
+		if self._compression == 'zlib':
+			data = zlib.compress(data)
+		assert(isinstance(data, bytes))
+		return data
+
+	def loads(self, data):
+		if not isinstance(data, bytes):
+			raise TypeError("loads() argument 1 must be bytes, not {0}".format(type(data).__name__))
+		if self._compression == 'zlib':
+			data = zlib.decompress(data)
+		if self.name.startswith('application/'):
+			data = data.decode(self._charset)
+		data = SERIALIZER_DRIVERS[self.name]['loads'](data)
+		if isinstance(data, list):
+			data = tuple(data)
+		return data
+
+	@staticmethod
+	def build_from_content_type(content_type):
+		name = content_type
+		options = {}
+		if ';' in content_type:
+			name, options_str = content_type.split(';', 1)
+			for part in options_str.split(';'):
+				part = part.strip()
+				if '=' in part:
+					key, value = part.split('=')
+				else:
+					key, value = (part, None)
+				options[key] = value
+		# old style compatibility
+		if name.endswith('+zlib'):
+			options['compression'] = 'zlib'
+			name = name[:-5]
+		return AdvancedHTTPServerSerializer(name, charset=options.get('charset', 'UTF-8'), compression=options.get('compression'))
 
 class AdvancedHTTPServer(object):
 	"""
@@ -1241,7 +1299,10 @@ class AdvancedHTTPServer(object):
 
 	@rpc_hmac_key.setter
 	def rpc_hmac_key(self, value):
-		self.http_server.rpc_hmac_key = str(value)
+		if not value:
+			self.http_server.rpc_hmac_key = None
+			return
+		self.http_server.rpc_hmac_key = value.encode('UTF-8')
 
 	@property
 	def server_version(self):
@@ -1330,6 +1391,10 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		A resource which has a handler set to it which will respond with
 		a 200 status code and the message 'Hello World!'
 		"""
+		if hasattr(self, 'assertRegexpMatches') and not hasattr(self, 'assertRegexMatches'):
+			self.assertRegexMatches = self.assertRegexpMatches
+		if hasattr(self, 'assertRaisesRegexp') and not hasattr(self, 'assertRegexMatches'):
+			self.assertRaisesRegex = self.assertRaisesRegexp
 
 	def setUp(self):
 		AdvancedHTTPServerRegisterPath("^{0}$".format(self.test_resource[1:]), self.handler_class.__name__)(self._test_resource_handler)
@@ -1340,7 +1405,8 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		self.server_thread.start()
 		self.assertTrue(self.server_thread.is_alive())
 		self.shutdown_requested = False
-		self.http_connection = http.client.HTTPConnection(self.config.get(self.config_section, 'ip'), self.config.getint(self.config_section, 'port'))
+		self.server_address = (self.config.get(self.config_section, 'ip'), self.config.getint(self.config_section, 'port'))
+		self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
 
 	def _test_resource_handler(self, handler, query):
 		handler.send_response(200)

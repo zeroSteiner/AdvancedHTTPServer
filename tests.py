@@ -31,12 +31,15 @@
 #
 
 import base64
+import datetime
 import hashlib
 import logging
 import os
+import random
 import unittest
 
-from AdvancedHTTPServer import AdvancedHTTPServerTestCase, random_string
+from AdvancedHTTPServer import *
+from AdvancedHTTPServer import random_string
 
 if hasattr(logging, 'NullHandler'):
 	null_handler = logging.NullHandler()
@@ -58,6 +61,26 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.server.auth_set(False)
 		response = self.http_request(self.test_resource, 'GET')
 		self.assertHTTPStatus(response, 200)
+
+	def setUp(self):
+		self.rpc_test_double = "{0}".format(random_string(40))
+		self.rpc_test_datetime = "{0}".format(random_string(40))
+		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_double), self.handler_class.__name__, is_rpc=True)(self._rpc_test_double_handler)
+		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_datetime), self.handler_class.__name__, is_rpc=True)(self._rpc_test_datetime_handler)
+		super(AdvancedHTTPServerTests, self).setUp()
+
+	def _rpc_test_double_handler(self, value):
+		return value * 2
+
+	def _rpc_test_datetime_handler(self):
+		return datetime.datetime.now()
+
+	def build_rpc_client(self, username=None, password=None, hmac_key=None, cached=False):
+		if cached:
+			klass = AdvancedHTTPServerRPCClientCached
+		else:
+			klass = AdvancedHTTPServerRPCClient
+		return klass(self.server_address, username=username, password=password, hmac_key=hmac_key)
 
 	def test_authentication_hash(self):
 		username = random_string(8)
@@ -83,6 +106,38 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.assertHTTPStatus(response, 404)
 		response = self.http_request('/' + random_string(30), 'POST')
 		self.assertHTTPStatus(response, 404)
+
+	def run_rpc_tests(self, rpc):
+		dt = rpc(self.rpc_test_datetime)
+		self.assertIsInstance(dt, datetime.datetime)
+		number = random.randint(0, 10000)
+		doubled = rpc(self.rpc_test_double, number)
+		self.assertEqual(doubled, number * 2)
+
+	def test_rpc_basic(self):
+		rpc = self.build_rpc_client()
+		self.run_rpc_tests(rpc)
+
+	def test_rpc_authentication(self):
+		username = random_string(8)
+		password = random_string(12)
+		self.server.auth_add_creds(username, password)
+		rpc = self.build_rpc_client()
+		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
+		rpc = self.build_rpc_client(username=username, password=random_string(12))
+		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
+		rpc = self.build_rpc_client(username=username, password=password)
+		self.run_rpc_tests(rpc)
+
+	def test_rpc_hmac(self):
+		hmac = random_string(16)
+		self.server.rpc_hmac_key = hmac
+		rpc = self.build_rpc_client()
+		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
+		rpc = self.build_rpc_client(hmac_key=random_string(16))
+		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
+		rpc = self.build_rpc_client(hmac_key=hmac)
+		self.run_rpc_tests(rpc)
 
 	def test_verb_fake(self):
 		response = self.http_request(self.test_resource, 'FAKE')
