@@ -73,7 +73,9 @@ __all__ = [
 	'AdvancedHTTPServerRPCClient',
 	'AdvancedHTTPServerRPCClientCached',
 	'AdvancedHTTPServerRPCError',
-	'AdvancedHTTPServerTestCase'
+	'AdvancedHTTPServerTestCase',
+	'build_server_from_argparser',
+	'build_server_from_config'
 ]
 
 import base64
@@ -1103,7 +1105,15 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		self.server.logger.info(self.address_string() + ' ' + format % args)
 
 class AdvancedHTTPServerSerializer(object):
+	"""
+	This class represents a serilizer object for use with the RPC system.
+	"""
 	def __init__(self, name, charset='UTF-8', compression=None):
+		"""
+		:param str name: The name of the serializer to use.
+		:param str charset: The name of the encoding to use.
+		:param str compression: The compression library to use.
+		"""
 		if not name in SERIALIZER_DRIVERS:
 			raise ValueError("unknown serializer '{0}'".format(name))
 		self.name = name
@@ -1114,6 +1124,13 @@ class AdvancedHTTPServerSerializer(object):
 			self.content_type += '; compression=' + self._compression
 
 	def dumps(self, data):
+		"""
+		Serialize a python data type for transmission or storage.
+
+		:param data: The python object to serialize.
+		:return: The serialized representation of the object.
+		:rtype: bytes
+		"""
 		data = SERIALIZER_DRIVERS[self.name]['dumps'](data)
 		if isinstance(data, str):
 			data = data.encode(self._charset)
@@ -1123,6 +1140,12 @@ class AdvancedHTTPServerSerializer(object):
 		return data
 
 	def loads(self, data):
+		"""
+		Deserialize the data into it's original python object.
+
+		:param bytes data: The serialized object to load.
+		:return: The original python object.
+		"""
 		if not isinstance(data, bytes):
 			raise TypeError("loads() argument 1 must be bytes, not {0}".format(type(data).__name__))
 		if self._compression == 'zlib':
@@ -1136,6 +1159,13 @@ class AdvancedHTTPServerSerializer(object):
 
 	@staticmethod
 	def build_from_content_type(content_type):
+		"""
+		Build a serializer object from a MIME Content-Type string.
+
+		:param str content_type: The Content-Type string to parse.
+		:return: A new configured serializer instance.
+		:rtype: :py:class:`.AdvancedHTTPServerSerializer`
+		"""
 		name = content_type
 		options = {}
 		if ';' in content_type:
@@ -1393,7 +1423,7 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		"""
 		if hasattr(self, 'assertRegexpMatches') and not hasattr(self, 'assertRegexMatches'):
 			self.assertRegexMatches = self.assertRegexpMatches
-		if hasattr(self, 'assertRaisesRegexp') and not hasattr(self, 'assertRegexMatches'):
+		if hasattr(self, 'assertRaisesRegexp') and not hasattr(self, 'assertRaisesRegex'):
 			self.assertRaisesRegex = self.assertRaisesRegexp
 
 	def setUp(self):

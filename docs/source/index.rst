@@ -51,6 +51,11 @@ Classes
    :members:
    :undoc-members:
 
+.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerSerializer
+   :members:
+   :special-members: __init__
+   :undoc-members:
+
 .. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerTestCase
    :members:
 

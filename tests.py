@@ -129,6 +129,11 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		rpc = self.build_rpc_client(username=username, password=password)
 		self.run_rpc_tests(rpc)
 
+	def test_rpc_compression(self):
+		rpc = self.build_rpc_client()
+		rpc.set_serializer('application/json', compression='zlib')
+		self.run_rpc_tests(rpc)
+
 	def test_rpc_hmac(self):
 		hmac = random_string(16)
 		self.server.rpc_hmac_key = hmac
