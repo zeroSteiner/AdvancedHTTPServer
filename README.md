@@ -1,7 +1,27 @@
-# AdvancedHTTPServer [![Build Status](https://travis-ci.org/zeroSteiner/AdvancedHTTPServer.png)](https://travis-ci.org/zeroSteiner/AdvancedHTTPServer)
-Micro web framework built on Python's BaseHTTPServer
+# AdvancedHTTPServer
+Standalone web server built on Python's BaseHTTPServer
+
+[![Build Status](http://img.shields.io/travis/zeroSteiner/AdvancedHTTPServer.svg?style=flat-square)](https://travis-ci.org/zeroSteiner/AdvancedHTTPServer)
+[![Documentation Status](https://readthedocs.org/projects/advancedhttpserver/badge/?version=latest&style=flat-square)](http://advancedhttpserver.readthedocs.org/en/latest)
+[![Github Issues](http://img.shields.io/github/issues/zerosteiner/AdvancedHTTPServer.svg?style=flat-square)](https://github.com/zerosteiner/AdvancedHTTPServer/issues)
 
 ## License
+AdvancedHTTPServer is released under the BSD 3-clause license, for more details
+see the [LICENSE](https://github.com/zeroSteiner/AdvancedHTTPServer/blob/master/LICENSE)
+file.
 
-AdvancedHTTPServer is released under the BSD 3-clause license, for more details see
-the COPYING file.
+## Dependencies
+AdvancedHTTPServer does not have any additional dependencies outside of the
+Python standard library.
+
+The following version of Python are currently supported:
+ - Python 2.7
+ - Python 3.3
+ - Python 3.4
+
+## Code Documentation
+AdvancedHTTPServer uses Sphinx for internal code documentation. This
+documentation can be generated from source with the command
+```sphinx-build docs/source docs/build```. The latest documentation is
+kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
+[advancedhttpserver.readthedocs.org](https://advancedhttpserver.readthedocs.org/en/latest/).
