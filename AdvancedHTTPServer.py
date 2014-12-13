@@ -1114,8 +1114,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			hmac_calculator.update(response)
 			self.send_header('HMAC', hmac_calculator.hexdigest())
 		self.end_headers()
-		if isinstance(response, str):
-			response = response.encode(sys.getdefaultencoding())
+
 		self.wfile.write(response)
 		return
 
