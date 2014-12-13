@@ -583,7 +583,7 @@ class AdvancedHTTPServerNonThreaded(http.server.HTTPServer, object):
 		self.serve_robots_txt = True
 		self.rpc_hmac_key = None
 		self.basic_auth = None
-		self.robots_txt = 'User-agent: *\nDisallow: /\n'
+		self.robots_txt = b'User-agent: *\nDisallow: /\n'
 		self.server_version = 'HTTPServer/' + __version__
 		super(AdvancedHTTPServerNonThreaded, self).__init__(*args, **kwargs)
 

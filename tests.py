@@ -118,6 +118,15 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		doubled = rpc(self.rpc_test_double, number)
 		self.assertEqual(doubled, number * 2)
 
+	def test_robots_dot_text(self):
+		response = self.http_request('/robots.txt', 'GET')
+		self.assertHTTPStatus(response, 200)
+		response_data = response.read()
+		self.assertEqual(b'User-agent: *\nDisallow: /\n', response_data)
+		self.server.serve_robots_txt = False
+		response = self.http_request('/robots.txt', 'GET')
+		self.assertHTTPStatus(response, 404)
+
 	def test_rpc_basic(self):
 		rpc = self.build_rpc_client()
 		self.run_rpc_tests(rpc)
