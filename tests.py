@@ -42,6 +42,13 @@ import unittest
 from AdvancedHTTPServer import *
 from AdvancedHTTPServer import random_string
 
+try:
+	import msgpack
+except ImportError:
+	has_msgpack = False
+else:
+	has_msgpack = True
+
 if hasattr(logging, 'NullHandler'):
 	null_handler = logging.NullHandler()
 else:
@@ -128,6 +135,11 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.assertHTTPStatus(response, 404)
 
 	def test_rpc_basic(self):
+		rpc = self.build_rpc_client()
+		self.run_rpc_tests(rpc)
+
+	@unittest.skipUnless(has_msgpack, 'this test requires msgpack')
+	def test_rpc_msgpack(self):
 		rpc = self.build_rpc_client()
 		self.run_rpc_tests(rpc)
 

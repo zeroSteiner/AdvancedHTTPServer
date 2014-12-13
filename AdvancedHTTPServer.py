@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.3.3'
+__version__ = '0.3.4'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -1153,7 +1153,7 @@ class AdvancedHTTPServerSerializer(object):
 		:rtype: bytes
 		"""
 		data = SERIALIZER_DRIVERS[self.name]['dumps'](data)
-		if isinstance(data, str):
+		if sys.version_info[0] == 3 and isinstance(data, str):
 			data = data.encode(self._charset)
 		if self._compression == 'zlib':
 			data = zlib.compress(data)
@@ -1171,7 +1171,7 @@ class AdvancedHTTPServerSerializer(object):
 			raise TypeError("loads() argument 1 must be bytes, not {0}".format(type(data).__name__))
 		if self._compression == 'zlib':
 			data = zlib.decompress(data)
-		if self.name.startswith('application/'):
+		if sys.version_info[0] == 3 and self.name.startswith('application/'):
 			data = data.decode(self._charset)
 		data = SERIALIZER_DRIVERS[self.name]['loads'](data)
 		if isinstance(data, list):
@@ -1376,9 +1376,11 @@ class AdvancedHTTPServer(object):
 		as a hash by specifying the hash type in the *pwtype* argument.
 
 		:param str username: The username of the credentials to be added.
-		:param str password: The password data of the credentials to be added.
+		:param bytes, str password: The password data of the credentials to be added.
 		:param str pwtype: The type of the *password* data, (plain, md5, sha1, etc.).
 		"""
+		if not isinstance(password, (bytes, str)):
+			raise TypeError("auth_add_creds() argument 2 must be bytes or str, not {0}".format(type(password).__name__))
 		pwtype = pwtype.lower()
 		if not pwtype in ('plain', 'md5', 'sha1', 'sha256', 'sha384', 'sha512'):
 			raise ValueError('invalid password type, must be \'plain\', or supported by hashlib')
@@ -1386,14 +1388,15 @@ class AdvancedHTTPServer(object):
 			self.http_server.basic_auth = {}
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
 		if pwtype != 'plain':
-			if not pwtype in hashlib.algorithms_available:
+			algorithms_available = getattr(hashlib, 'algorithms_available', ()) or getattr(hashlib, 'algorithms', ())
+			if not pwtype in algorithms_available:
 				raise ValueError('hashlib does not support the desired algorithm')
 			# only md5 and sha1 hex for backwards compatibility
 			if pwtype == 'md5' and len(password) == 32:
 				password = binascii.unhexlify(password)
 			elif pwtype == 'sha1' and len(password) == 40:
 				password = binascii.unhexlify(password)
-			if isinstance(password, str):
+			if not isinstance(password, bytes):
 				password = password.encode('UTF-8')
 			if len(hashlib.new(pwtype, b'foobar').digest()) != len(password):
 				raise ValueError('the length of the password hash does not match the type specified')
