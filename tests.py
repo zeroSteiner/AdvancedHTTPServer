@@ -36,6 +36,7 @@ import hashlib
 import logging
 import os
 import random
+import time
 import unittest
 
 from AdvancedHTTPServer import *
@@ -88,6 +89,9 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		password_hash = hashlib.new('md5', password.encode('utf-8')).hexdigest()
 		self.server.auth_add_creds(username, password_hash, 'md5')
 		self._test_authentication(username, password)
+		password_hash = hashlib.new('md5', password.encode('utf-8')).digest()
+		self.server.auth_add_creds(username, password_hash, 'md5')
+		self._test_authentication(username, password)
 
 	def test_authentication_plain(self):
 		username = random_string(8)
@@ -128,6 +132,15 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
 		rpc = self.build_rpc_client(username=username, password=password)
 		self.run_rpc_tests(rpc)
+
+	def test_rpc_cached(self):
+		rpc = self.build_rpc_client(cached=True)
+		dt1 = rpc.cache_call(self.rpc_test_datetime)
+		self.assertIsInstance(dt1, datetime.datetime)
+		time.sleep(0.5)
+		dt2 = rpc.cache_call(self.rpc_test_datetime)
+		self.assertIsInstance(dt2, datetime.datetime)
+		self.assertEqual(dt1, dt2)
 
 	def test_rpc_compression(self):
 		rpc = self.build_rpc_client()

@@ -20,6 +20,8 @@ Data
 Functions
 ---------
 
+.. autofunction:: AdvancedHTTPServer.build_serializer_from_content_type
+
 .. autofunction:: AdvancedHTTPServer.build_server_from_argparser
 
 .. autofunction:: AdvancedHTTPServer.build_server_from_config

@@ -60,24 +60,6 @@ class DemoHandler(AdvancedHTTPServerRequestHandler):
 	def res_exception(self, query):
 		raise Exception('this is an exception, oh noes!')
 
-class DemoREST(AdvancedHTTPServerRESTAPI):
-	def install_handlers(self):
-		self.handler_map['^test$'] = self.api_test
-		self.handler_map['xor'] = self.api_xor
-
-	def api_test(self):
-		return 'Hello world!'
-
-	def api_xor(self, key, data):
-		key = int(key)
-		data = str(data)
-		return ''.join(map(lambda x: chr(ord(x) ^ key), data))
-
-# DemoREST is specified to only register this path with that handler
-@AdvancedHTTPServerRegisterPath('^greet$', 'DemoREST')
-def api_greet(handler, name):
-	return "Hello {0}!".format(name)
-
 def main():
 	print("AdvancedHTTPServer version: {0}".format(__version__))
 	logging.getLogger('').setLevel(logging.DEBUG)
@@ -87,8 +69,6 @@ def main():
 	logging.getLogger('').addHandler(console_log_handler)
 
 	server = AdvancedHTTPServer(DemoHandler)
-	rest_api = DemoREST()
-	server.init_rest_api(rest_api)
 	#server.auth_add_creds('demouser', 'demopass')
 	server.server_version = 'AdvancedHTTPServerDemo'
 	server.serve_forever()

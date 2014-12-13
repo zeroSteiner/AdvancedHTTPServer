@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.3.2'
+__version__ = '0.3.3'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -79,6 +79,7 @@ __all__ = [
 ]
 
 import base64
+import binascii
 import cgi
 import datetime
 import hashlib
@@ -178,6 +179,31 @@ def random_string(size):
 	:rtype: str
 	"""
 	return ''.join(random.choice(string.ascii_letters + string.digits) for x in range(size))
+
+def build_serializer_from_content_type(content_type):
+	"""
+	Build a serializer object from a MIME Content-Type string.
+
+	:param str content_type: The Content-Type string to parse.
+	:return: A new configured serializer instance.
+	:rtype: :py:class:`.AdvancedHTTPServerSerializer`
+	"""
+	name = content_type
+	options = {}
+	if ';' in content_type:
+		name, options_str = content_type.split(';', 1)
+		for part in options_str.split(';'):
+			part = part.strip()
+			if '=' in part:
+				key, value = part.split('=')
+			else:
+				key, value = (part, None)
+			options[key] = value
+	# old style compatibility
+	if name.endswith('+zlib'):
+		options['compression'] = 'zlib'
+		name = name[:-5]
+	return AdvancedHTTPServerSerializer(name, charset=options.get('charset', 'UTF-8'), compression=options.get('compression'))
 
 def build_server_from_argparser(description=None, ServerClass=None, HandlerClass=None):
 	"""
@@ -926,14 +952,9 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 				if password == password_data['value']:
 					self.basic_auth_user = username
 					return True
-			elif password_data['type'] == 'md5':
-				if hashlib.new('md5', password_bytes).hexdigest() == password_data['value']:
-					self.basic_auth_user = username
-					return True
-			elif password_data['type'] == 'sha1':
-				if hashlib.new('sha1', password_bytes).hexdigest() == password_data['value']:
-					self.basic_auth_user = username
-					return True
+			elif hashlib.new(password_data['type'], password_bytes).digest() == password_data['value']:
+				self.basic_auth_user = username
+				return True
 			self.server.logger.warning('received invalid password from user: ' + username)
 			return False
 		except:
@@ -1046,7 +1067,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 				return
 
 		try:
-			serializer = AdvancedHTTPServerSerializer.build_from_content_type(content_type)
+			serializer = build_serializer_from_content_type(content_type)
 		except ValueError:
 			self.send_error(400, 'Invalid Content-Type')
 			return
@@ -1156,32 +1177,6 @@ class AdvancedHTTPServerSerializer(object):
 		if isinstance(data, list):
 			data = tuple(data)
 		return data
-
-	@staticmethod
-	def build_from_content_type(content_type):
-		"""
-		Build a serializer object from a MIME Content-Type string.
-
-		:param str content_type: The Content-Type string to parse.
-		:return: A new configured serializer instance.
-		:rtype: :py:class:`.AdvancedHTTPServerSerializer`
-		"""
-		name = content_type
-		options = {}
-		if ';' in content_type:
-			name, options_str = content_type.split(';', 1)
-			for part in options_str.split(';'):
-				part = part.strip()
-				if '=' in part:
-					key, value = part.split('=')
-				else:
-					key, value = (part, None)
-				options[key] = value
-		# old style compatibility
-		if name.endswith('+zlib'):
-			options['compression'] = 'zlib'
-			name = name[:-5]
-		return AdvancedHTTPServerSerializer(name, charset=options.get('charset', 'UTF-8'), compression=options.get('compression'))
 
 class AdvancedHTTPServer(object):
 	"""
@@ -1382,16 +1377,26 @@ class AdvancedHTTPServer(object):
 
 		:param str username: The username of the credentials to be added.
 		:param str password: The password data of the credentials to be added.
-		:param str pwtype: The type of the *password* data, (plain, md5 or sha1).
+		:param str pwtype: The type of the *password* data, (plain, md5, sha1, etc.).
 		"""
 		pwtype = pwtype.lower()
-		if not pwtype in ('plain', 'md5', 'sha1'):
-			raise ValueError('invalid password type, must be (\'plain\', \'md5\', \'sha1\')')
+		if not pwtype in ('plain', 'md5', 'sha1', 'sha256', 'sha384', 'sha512'):
+			raise ValueError('invalid password type, must be \'plain\', or supported by hashlib')
 		if self.http_server.basic_auth == None:
 			self.http_server.basic_auth = {}
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
 		if pwtype != 'plain':
-			password = password.lower()
+			if not pwtype in hashlib.algorithms_available:
+				raise ValueError('hashlib does not support the desired algorithm')
+			# only md5 and sha1 hex for backwards compatibility
+			if pwtype == 'md5' and len(password) == 32:
+				password = binascii.unhexlify(password)
+			elif pwtype == 'sha1' and len(password) == 40:
+				password = binascii.unhexlify(password)
+			if isinstance(password, str):
+				password = password.encode('UTF-8')
+			if len(hashlib.new(pwtype, b'foobar').digest()) != len(password):
+				raise ValueError('the length of the password hash does not match the type specified')
 		self.http_server.basic_auth[username] = {'value': password, 'type': pwtype}
 
 class AdvancedHTTPServerTestCase(unittest.TestCase):

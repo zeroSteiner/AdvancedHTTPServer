@@ -45,12 +45,17 @@ setup(
 	description='Advanced Python HTTP Server Library',
 	py_modules=['AdvancedHTTPServer'],
 	classifiers=[
-		'Intended Audience :: End Users/Desktop',
+		'Development Status :: 5 - Production/Stable',
+		'Environment :: Console',
 		'Intended Audience :: Developers',
+		'Intended Audience :: End Users/Desktop',
+		'Intended Audience :: Information Technology',
 		'Intended Audience :: System Administrators',
 		'License :: OSI Approved :: BSD License',
 		'Operating System :: POSIX',
-		'Programming Language :: Python',
+		'Programming Language :: Python :: 2.7',
+		'Programming Language :: Python :: 3.3',
+		'Programming Language :: Python :: 3.4',
 		'Topic :: Internet :: WWW/HTTP :: HTTP Servers'
 	]
 )
