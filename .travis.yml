@@ -2,15 +2,8 @@ language: python
 
 python:
   - "2.7"
-
-cache:
-  - apt
-
-virtualenv:
-  system_site_packages: true
-
-before_install:
-  - sudo apt-get update -qq
+  - "3.3"
+  - "3.4"
 
 script:
   - python -m unittest -v tests
