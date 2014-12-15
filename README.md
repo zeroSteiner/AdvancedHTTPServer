@@ -10,6 +10,16 @@ AdvancedHTTPServer is released under the BSD 3-clause license, for more details
 see the [LICENSE](https://github.com/zeroSteiner/AdvancedHTTPServer/blob/master/LICENSE)
 file.
 
+## Features
+AdvancedHTTPServer builds on top of Python's include BaseHTTPServer and provides out of the box support for additional commonly needed features such as:
+ - Threading
+ - SSL
+ - Registering handler functions to HTTP resources
+ - A default robots.txt file
+ - Forking the server process
+ - Basic Authentication
+ - The HTTP verbs GET HEAD POST and OPTIONS
+
 ## Dependencies
 AdvancedHTTPServer does not have any additional dependencies outside of the
 Python standard library.
