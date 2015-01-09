@@ -128,11 +128,12 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.assertEqual(doubled, number * 2)
 
 	def test_resolve_ssl_protocol_version(self):
-		self.assertTrue(isinstance(resolve_ssl_protocol_version(), int))
-		self.assertEqual(resolve_ssl_protocol_version('SSLv2'), ssl.PROTOCOL_SSLv2)
-		self.assertEqual(resolve_ssl_protocol_version('SSLv23'), ssl.PROTOCOL_SSLv23)
-		if hasattr(ssl, 'PROTOCOL_TLSv1'):
-			self.assertGreaterEqual(resolve_ssl_protocol_version(), ssl.PROTOCOL_TLSv1)
+		default_version = resolve_ssl_protocol_version()
+		self.assertTrue(isinstance(default_version, int))
+		for version_constant in filter(lambda a: a.startswith('PROTOCOL_'), dir(ssl)):
+			version_name = version_constant[9:]
+			version = getattr(ssl, version_constant)
+			self.assertEqual(resolve_ssl_protocol_version(version_name), version)
 
 	def test_robots_dot_text(self):
 		response = self.http_request('/robots.txt', 'GET')
