@@ -28,6 +28,8 @@ Functions
 
 .. autofunction:: AdvancedHTTPServer.random_string
 
+.. autofunction:: AdvancedHTTPServer.resolve_ssl_protocol_version
+
 Classes
 -------
 

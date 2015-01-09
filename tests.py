@@ -36,11 +36,13 @@ import hashlib
 import logging
 import os
 import random
+import ssl
 import time
 import unittest
 
 from AdvancedHTTPServer import *
 from AdvancedHTTPServer import random_string
+from AdvancedHTTPServer import resolve_ssl_protocol_version
 
 try:
 	import msgpack
@@ -124,6 +126,13 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		number = random.randint(0, 10000)
 		doubled = rpc(self.rpc_test_double, number)
 		self.assertEqual(doubled, number * 2)
+
+	def test_resolve_ssl_protocol_version(self):
+		self.assertTrue(isinstance(resolve_ssl_protocol_version(), int))
+		self.assertEqual(resolve_ssl_protocol_version('SSLv2'), ssl.PROTOCOL_SSLv2)
+		self.assertEqual(resolve_ssl_protocol_version('SSLv23'), ssl.PROTOCOL_SSLv23)
+		if hasattr(ssl, 'PROTOCOL_TLSv1'):
+			self.assertGreaterEqual(resolve_ssl_protocol_version(), ssl.PROTOCOL_TLSv1)
 
 	def test_robots_dot_text(self):
 		response = self.http_request('/robots.txt', 'GET')

@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.4.0'
+__version__ = '0.4.1'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -179,6 +179,27 @@ def random_string(size):
 	:rtype: str
 	"""
 	return ''.join(random.choice(string.ascii_letters + string.digits) for x in range(size))
+
+def resolve_ssl_protocol_version(version=None):
+	"""
+	Look up an SSL protocol version by name. If *version* is not specified, then
+	the strongest protocol available will be returned.
+
+	:param str version: The name of the version to look up.
+	:return: A protocol constant from the :py:mod:`ssl` module.
+	:rtype: int
+	"""
+	if version == None:
+		protocol_preference = ('TLSv1_2', 'TLSv1_1', 'TLSv1', 'SSLv3', 'SSLv23', 'SSLv2')
+		for protocol in protocol_preference:
+			if hasattr(ssl, 'PROTOCOL_' + protocol):
+				return getattr(ssl, 'PROTOCOL_' + protocol)
+		raise RuntimeError('could not find a suitable ssl PROTOCOL_ version constant')
+	elif isinstance(version, str):
+		if not hasattr(ssl, 'PROTOCOL_' + version):
+			raise ValueError('invalid ssl protocol version: ' + version)
+		return getattr(ssl, 'PROTOCOL_' + version)
+	raise TypeError("ssl_version() argument 1 must be str, not {0}".format(type(version).__name__))
 
 def build_serializer_from_content_type(content_type):
 	"""
@@ -1183,7 +1204,7 @@ class AdvancedHTTPServer(object):
 	the port is guessed based on if the server is run as root or not and
 	SSL is used.
 	"""
-	def __init__(self, RequestHandler, address=None, use_threads=True, ssl_certfile=None, ssl_keyfile=None):
+	def __init__(self, RequestHandler, address=None, use_threads=True, ssl_certfile=None, ssl_keyfile=None, ssl_version=None):
 		"""
 		:param RequestHandler: The request handler class to use.
 		:type RequestHandler: :py:class:`.AdvancedHTTPServerRequestHandler`
@@ -1191,6 +1212,7 @@ class AdvancedHTTPServer(object):
 		:param bool use_threads: Whether to enable the use of a threaded handler.
 		:param str ssl_certfile: An SSL certificate file to use, setting this enables SSL.
 		:param str ssl_keyfile: An SSL certificate file to use.
+		:param ssl_version: The SSL protocol version to use.
 		"""
 		self.use_ssl = bool(ssl_certfile)
 		if address == None:
@@ -1218,7 +1240,9 @@ class AdvancedHTTPServer(object):
 		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
 
 		if self.use_ssl:
-			self.http_server.socket = ssl.wrap_socket(self.http_server.socket, keyfile=ssl_keyfile, certfile=ssl_certfile, server_side=True)
+			if ssl_version == None or isinstance(ssl_version, str):
+				ssl_version = resolve_ssl_protocol_version(ssl_version)
+			self.http_server.socket = ssl.wrap_socket(self.http_server.socket, keyfile=ssl_keyfile, certfile=ssl_certfile, server_side=True, ssl_version=ssl_version)
 			self.http_server.using_ssl = True
 			self.logger.info(address[0] + ':' + str(address[1]) + ' - ssl has been enabled')
 
