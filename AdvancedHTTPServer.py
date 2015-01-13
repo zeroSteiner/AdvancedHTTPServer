@@ -407,6 +407,8 @@ class AdvancedHTTPServerRPCError(Exception):
 		"""
 		This is true of the represented error resulted from an exception
 		on the remote server.
+
+		:type: bool
 		"""
 		return bool(self.remote_exception != None)
 
@@ -1397,7 +1399,8 @@ class AdvancedHTTPServer(object):
 		as a hash by specifying the hash type in the *pwtype* argument.
 
 		:param str username: The username of the credentials to be added.
-		:param bytes, str password: The password data of the credentials to be added.
+		:param password: The password data of the credentials to be added.
+		:type password: bytes, str
 		:param str pwtype: The type of the *password* data, (plain, md5, sha1, etc.).
 		"""
 		if not isinstance(password, (bytes, str)):
