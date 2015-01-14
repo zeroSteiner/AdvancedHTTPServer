@@ -405,8 +405,8 @@ class AdvancedHTTPServerRPCError(Exception):
 	@property
 	def is_remote_exception(self):
 		"""
-		This is true of the represented error resulted from an exception
-		on the remote server.
+		This is true if the represented error resulted from an exception on the
+		remote server.
 
 		:type: bool
 		"""

@@ -5,5 +5,9 @@ python:
   - "3.3"
   - "3.4"
 
+install:
+  - pip install sphinx
+
 script:
   - python -m unittest -v tests
+  - sphinx-build docs/source docs/html
