@@ -80,7 +80,6 @@ __all__ = [
 
 import base64
 import binascii
-import cgi
 import datetime
 import hashlib
 import hmac
@@ -108,6 +107,7 @@ import zlib
 
 if sys.version_info[0] < 3:
 	import BaseHTTPServer
+	import cgi as html
 	import Cookie
 	import httplib
 	import SocketServer as socketserver
@@ -118,6 +118,7 @@ if sys.version_info[0] < 3:
 	urllib.parse.unquote = urllib.unquote
 	from ConfigParser import ConfigParser
 else:
+	import html
 	import http.client
 	import http.cookies
 	import http.server
@@ -726,7 +727,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		if os.path.normpath(dir_path) != self.server.serve_files_root:
 			dir_contents.append('..')
 		dir_contents.sort(key=lambda a: a.lower())
-		displaypath = cgi.escape(urllib.parse.unquote(self.path))
+		displaypath = html.escape(urllib.parse.unquote(self.path), quote=True)
 
 		f = io.BytesIO()
 		encoding = sys.getfilesystemencoding()
@@ -744,7 +745,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			if os.path.islink(fullname):
 				displayname = name + "@"
 				# Note: a link to a directory displays with @ and links with /
-			f.write(('<li><a href="' + urllib.parse.quote(linkname) + '">' + cgi.escape(displayname) + '</a>\n').encode(encoding))
+			f.write(('<li><a href="' + urllib.parse.quote(linkname) + '">' + html.escape(displayname, quote=True) + '</a>\n').encode(encoding))
 		f.write(b'</ul>\n<hr>\n</body>\n</html>\n')
 		length = f.tell()
 		f.seek(0)
