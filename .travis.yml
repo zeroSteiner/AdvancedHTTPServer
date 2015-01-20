@@ -6,6 +6,7 @@ python:
   - "3.4"
 
 install:
+  - pip install msgpack-python
   - pip install sphinx
 
 script:
