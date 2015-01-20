@@ -143,7 +143,7 @@ def _json_object_hook(obj):
 
 SERIALIZER_DRIVERS = {}
 """Dictionary of available drivers for serialization."""
-SERIALIZER_DRIVERS['application/json'] = {'loads': lambda d: json.loads(d, object_hook=_json_object_hook), 'dumps': lambda d: json.dumps(d, default=_json_default)}
+SERIALIZER_DRIVERS['application/json'] = {'loads': lambda d, e: json.loads(d, object_hook=_json_object_hook), 'dumps': lambda d: json.dumps(d, default=_json_default)}
 
 try:
 	import msgpack
@@ -162,7 +162,7 @@ else:
 			else:
 				return datetime.datetime.strptime(data, '%Y-%m-%dT%H:%M:%S')
 		return msfpack.ExtType(code, data)
-	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads': lambda d: msgpack.loads(d, ext_hook=_msgpack_ext_hook), 'dumps': lambda d: msgpack.dumps(d, default=_msgpack_default)}
+	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads': lambda d, e: msgpack.loads(d, encoding=e, ext_hook=_msgpack_ext_hook), 'dumps': lambda d: msgpack.dumps(d, default=_msgpack_default)}
 
 
 if hasattr(logging, 'NullHandler'):
@@ -559,7 +559,7 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		cursor.execute('SELECT return_value FROM cache WHERE method = ? AND options_hash = ?', (method, options_hash))
 		return_value = cursor.fetchone()
 		if return_value:
-			return_value = self.cache_serializer_loads(return_value[0])
+			return_value = self.cache_serializer_loads(return_value[0], 'UTF-8')
 		else:
 			return_value = self.call(method, *options)
 			cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, self.cache_serializer_dumps(return_value)))
@@ -1193,7 +1193,7 @@ class AdvancedHTTPServerSerializer(object):
 			data = zlib.decompress(data)
 		if sys.version_info[0] == 3 and self.name.startswith('application/'):
 			data = data.decode(self._charset)
-		data = SERIALIZER_DRIVERS[self.name]['loads'](data)
+		data = SERIALIZER_DRIVERS[self.name]['loads'](data, (self._charset if sys.version_info[0] == 3 else None))
 		if isinstance(data, list):
 			data = tuple(data)
 		return data
