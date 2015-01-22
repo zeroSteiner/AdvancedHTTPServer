@@ -1028,7 +1028,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			return
 		content_length = int(self.headers.get('content-length', 0))
 		data = self.rfile.read(content_length)
-		self.query_data_raw = data
+		self.raw_query_data = data
 		content_type = self.headers.get('content-type', '')
 		content_type = content_type.split(';', 1)[0]
 		self.query_data = {}
@@ -1145,6 +1145,16 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 
 	def log_message(self, format, *args):
 		self.server.logger.info(self.address_string() + ' ' + format % args)
+
+	def get_query(self, name, default=None):
+		"""
+		Get a value from the query data that was sent to the server.
+
+		:param str name: The name of the query value to retrieve.
+		:return: The value if it exists, otherwise *default* will be returned.
+		:rtype: str
+		"""
+		return self.query_data.get(parameter, [default])[0]
 
 class AdvancedHTTPServerSerializer(object):
 	"""

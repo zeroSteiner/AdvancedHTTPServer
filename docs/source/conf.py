@@ -46,8 +46,8 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'AdvancedHTTPServer'
-copyright = u'2015, Spencer McIntyre'
+project = 'AdvancedHTTPServer'
+copyright = '2013-2015, Spencer McIntyre'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
