@@ -506,7 +506,7 @@ class AdvancedHTTPServerRPCClient(object):
 		if self.hmac_key != None:
 			hmac_calculator = hmac.new(self.hmac_key, digestmod=hashlib.sha1)
 			hmac_calculator.update(options)
-			headers['HMAC'] = hmac_calculator.hexdigest()
+			headers['X-RPC-HMAC'] = hmac_calculator.hexdigest()
 
 		if self.username != None and self.password != None:
 			headers['Authorization'] = 'Basic ' + base64.b64encode((self.username + ':' + self.password).encode('UTF-8')).decode('UTF-8')
@@ -521,7 +521,7 @@ class AdvancedHTTPServerRPCClient(object):
 
 		resp_data = resp.read()
 		if self.hmac_key != None:
-			hmac_digest = resp.getheader('hmac')
+			hmac_digest = resp.getheader('X-RPC-HMAC')
 			if not isinstance(hmac_digest, str):
 				raise AdvancedHTTPServerRPCError('hmac validation error', resp.status)
 			hmac_digest = hmac_digest.lower()
@@ -1083,7 +1083,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			return
 
 		if self.server.rpc_hmac_key != None:
-			hmac_digest = self.headers.get('hmac')
+			hmac_digest = self.headers.get('X-RPC-HMAC')
 			if not isinstance(hmac_digest, str):
 				self.respond_unauthorized(request_authentication=True)
 				return
@@ -1141,7 +1141,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		if self.server.rpc_hmac_key != None:
 			hmac_calculator = hmac.new(self.server.rpc_hmac_key, digestmod=hashlib.sha1)
 			hmac_calculator.update(response)
-			self.send_header('HMAC', hmac_calculator.hexdigest())
+			self.send_header('X-RPC-HMAC', hmac_calculator.hexdigest())
 		self.end_headers()
 
 		self.wfile.write(response)

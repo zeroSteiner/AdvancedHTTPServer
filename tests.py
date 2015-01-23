@@ -201,6 +201,7 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		dt = datetime.datetime.utcnow()
 		dt_encoded = serializer.dumps(dt)
 		dt_decoded = serializer.loads(dt_encoded)
+		self.assertNotEqual(dt_encoded, dt_decoded)
 		self.assertEqual(dt_decoded, dt)
 
 	@unittest.skipUnless(has_msgpack, 'this test requires msgpack')
@@ -209,6 +210,7 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		dt = datetime.datetime.utcnow()
 		dt_encoded = serializer.dumps(dt)
 		dt_decoded = serializer.loads(dt_encoded)
+		self.assertNotEqual(dt_encoded, dt_decoded)
 		self.assertEqual(dt_decoded, dt)
 
 	def test_verb_fake(self):
