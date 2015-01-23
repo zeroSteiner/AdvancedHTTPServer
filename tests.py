@@ -228,5 +228,15 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.assertHTTPStatus(response, 200)
 		self.assertTrue(len(response.read()) == 0)
 
+	def test_verb_options(self):
+		response = self.http_request(self.test_resource, 'OPTIONS')
+		self.assertHTTPStatus(response, 200)
+		self.assertTrue(len(response.read()) == 0)
+		allow_header = response.getheader('Allow')
+		self.assertIsNotNone(allow_header)
+		should_allow = set(['POST', 'HEAD', 'RPC', 'OPTIONS', 'GET'])
+		real_allow = set(allow_header.split(', '))
+		self.assertSetEqual(real_allow, should_allow)
+
 if __name__ == '__main__':
 	unittest.main()

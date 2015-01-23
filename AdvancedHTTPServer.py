@@ -1063,7 +1063,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		return
 
 	def do_OPTIONS(self):
-		available_methods = map(lambda x: x[3:], filter(lambda x: x.startswith('do_'), dir(self)))
+		available_methods = list(map(lambda x: x[3:], filter(lambda x: x.startswith('do_'), dir(self))))
 		if 'RPC' in available_methods and len(self.rpc_handler_map) == 0:
 			available_methods.remove('RPC')
 		self.send_response(200)
