@@ -4,6 +4,7 @@ Standalone web server built on Python's BaseHTTPServer
 [![Build Status](http://img.shields.io/travis/zeroSteiner/AdvancedHTTPServer.svg?style=flat-square)](https://travis-ci.org/zeroSteiner/AdvancedHTTPServer)
 [![Documentation Status](https://readthedocs.org/projects/advancedhttpserver/badge/?version=latest&style=flat-square)](http://advancedhttpserver.readthedocs.org/en/latest)
 [![Github Issues](http://img.shields.io/github/issues/zerosteiner/AdvancedHTTPServer.svg?style=flat-square)](https://github.com/zerosteiner/AdvancedHTTPServer/issues)
+[![PyPi Release](https://img.shields.io/pypi/v/AdvancedHTTPServer.svg?style=flat-square)](https://pypi.python.org/pypi/AdvancedHTTPServer)
 
 ## License
 AdvancedHTTPServer is released under the BSD 3-clause license, for more details
