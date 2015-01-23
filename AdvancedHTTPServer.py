@@ -663,9 +663,12 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 
 	def __init__(self, *args, **kwargs):
 		self.handler_map = {}
+		"""The dict object which maps regular expressions of resources to the functions which should handle them."""
 		self.rpc_handler_map = {}
+		"""The dict object which maps regular expressions of RPC functions to their handlers."""
 		self.server = args[2]
 		self.headers_active = False
+		"""Whether or not the request is in the sending headers phase."""
 		for map_name in (None, self.__class__.__name__):
 			handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
 			for path, function_info in handler_map.items():
@@ -677,6 +680,11 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		self.install_handlers()
 
 		self.basic_auth_user = None
+		"""The name of the user if the current request is using basic authentication."""
+		self.query_data = None
+		"""The parameter data that has been passed to the server parsed as a dict."""
+		self.raw_query_data = None
+		"""The raw data that was parsed into the :py:attr:`.query_data` attribute."""
 		super(AdvancedHTTPServerRequestHandler, self).__init__(*args, **kwargs)
 
 	def version_string(self):
@@ -949,7 +957,9 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 	def check_authorization(self):
 		"""
 		Check for the presence of a basic auth Authorization header and
-		if the credentials contained within are valid.
+		if the credentials contained within in are valid.
+		:return: Whether or not the credentials are valid.
+		:rtype: bool
 		"""
 		try:
 			if self.server.basic_auth == None:
