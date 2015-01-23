@@ -41,6 +41,8 @@ import time
 import unittest
 
 from AdvancedHTTPServer import *
+from AdvancedHTTPServer import AdvancedHTTPServerSerializer
+from AdvancedHTTPServer import build_serializer_from_content_type
 from AdvancedHTTPServer import random_string
 from AdvancedHTTPServer import resolve_ssl_protocol_version
 
@@ -151,6 +153,7 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 	@unittest.skipUnless(has_msgpack, 'this test requires msgpack')
 	def test_rpc_msgpack(self):
 		rpc = self.build_rpc_client()
+		rpc.set_serializer('binary/message-pack')
 		self.run_rpc_tests(rpc)
 
 	def test_rpc_authentication(self):
@@ -187,6 +190,26 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
 		rpc = self.build_rpc_client(hmac_key=hmac)
 		self.run_rpc_tests(rpc)
+
+	def test_serializer_build(self):
+		serializer = build_serializer_from_content_type('application/json')
+		self.assertIsInstance(serializer, AdvancedHTTPServerSerializer)
+		self.assertEqual(serializer.name, 'application/json')
+
+	def test_serializer_json(self):
+		serializer = AdvancedHTTPServerSerializer('application/json')
+		dt = datetime.datetime.utcnow()
+		dt_encoded = serializer.dumps(dt)
+		dt_decoded = serializer.loads(dt_encoded)
+		self.assertEqual(dt_decoded, dt)
+
+	@unittest.skipUnless(has_msgpack, 'this test requires msgpack')
+	def test_serializer_msgpack(self):
+		serializer = AdvancedHTTPServerSerializer('binary/message-pack')
+		dt = datetime.datetime.utcnow()
+		dt_encoded = serializer.dumps(dt)
+		dt_decoded = serializer.loads(dt_encoded)
+		self.assertEqual(dt_decoded, dt)
 
 	def test_verb_fake(self):
 		response = self.http_request(self.test_resource, 'FAKE')
