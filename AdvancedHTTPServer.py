@@ -1033,6 +1033,8 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		content_type = content_type.split(';', 1)[0]
 		self.query_data = {}
 		try:
+			if not isinstance(data, str):
+				data = data.decode(self.get_content_type_charset())
 			if content_type.startswith('application/json'):
 				data = json.loads(data)
 				if isinstance(data, dict):
@@ -1155,6 +1157,22 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		:rtype: str
 		"""
 		return self.query_data.get(parameter, [default])[0]
+
+	def get_content_type_charset(self, default='UTF-8'):
+		"""
+		Inspect the Content-Type header to retrieve the charset that the client
+		has specified.
+
+		:param str default: The default charset to return if none exists.
+		:return: The charset of the request.
+		:rtype: str
+		"""
+		encoding = default
+		header = self.headers.get('Content-Type', '')
+		idx = header.find('charset=')
+		if idx > 0:
+			encoding = (header[idx + 8:].split(' ', 1)[0] or encoding)
+		return encoding
 
 class AdvancedHTTPServerSerializer(object):
 	"""
