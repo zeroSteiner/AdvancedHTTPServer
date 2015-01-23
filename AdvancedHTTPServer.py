@@ -153,11 +153,16 @@ except ImportError:
 else:
 	def _msgpack_default(obj):
 		if isinstance(obj, datetime.datetime):
-			return msgpack.ExtType(10, obj.isoformat())
+			obj = obj.isoformat()
+			if sys.version_info[0] == 3:
+				obj = obj.encode('utf-8')
+			return msgpack.ExtType(10, obj)
 		raise TypeError('Unknown type: ' + repr(obj))
 
 	def _msgpack_ext_hook(code, data):
 		if code == 10:
+			if sys.version_info[0] == 3:
+				data = data.decode('utf-8')
 			if '.' in data:
 				return datetime.datetime.strptime(data, '%Y-%m-%dT%H:%M:%S.%f')
 			else:
