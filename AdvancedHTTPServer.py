@@ -34,7 +34,7 @@
 #  Author:   Spencer McIntyre (zeroSteiner)
 
 # Config File Example
-"""
+FILE_CONFIG = """
 [server]
 ip = 0.0.0.0
 port = 8080
@@ -45,20 +45,19 @@ list_directories = True
 """
 
 # The AdvancedHTTPServer systemd service unit file
-"""
 # Quick How To:
 # 1. Copy this file to /etc/systemd/system/pyhttpd.service
-# 2. Edit <USER> and run parameters appropriately in the ExecStart option
+# 2. Edit the run parameters appropriately in the ExecStart option
 # 3. Set configuration settings in /etc/pyhttpd.conf
 # 4. Run "systemctl daemon-reload"
-
+FILE_SYSTEMD_SERVICE_UNIT = """
 [Unit]
 Description=Python Advanced HTTP Server
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/sbin/runuser -l <USER> -c "/usr/bin/python -m AdvancedHTTPServer -c /etc/pyhttpd.conf"
+ExecStart=/sbin/runuser -l nobody -c "/usr/bin/python -m AdvancedHTTPServer -c /etc/pyhttpd.conf"
 ExecStop=/bin/kill -INT $MAINPID
 
 [Install]
@@ -466,7 +465,7 @@ class AdvancedHTTPServerRPCClient(object):
 		:param str serializer_name: The name of the serializer to use.
 		:param str compression: The name of a compression library to use.
 		"""
-		self.serializer = AdvancedHTTPServerSerializer(serializer_name, charset='UTF-8')
+		self.serializer = AdvancedHTTPServerSerializer(serializer_name, charset='UTF-8', compression=compression)
 		self.logger.debug('using serializer: ' + serializer_name)
 
 	def __call__(self, *args, **kwargs):
@@ -1515,6 +1514,7 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 		self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
 
 	def _test_resource_handler(self, handler, query):
+		del query
 		handler.send_response(200)
 		handler.end_headers()
 		message = b'Hello World!\r\n\r\n'
