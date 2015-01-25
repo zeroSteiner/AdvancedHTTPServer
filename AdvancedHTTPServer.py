@@ -705,6 +705,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		:param str file_path: The path to the file to serve, this does not need to be in the web root.
 		:param bool attachment: Whether to serve the file as a download by setting the Content-Disposition header.
 		"""
+		del query
 		file_path = os.path.abspath(file_path)
 		try:
 			file_obj = open(file_path, 'rb')
@@ -731,6 +732,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 
 		:param str dir_path: The path of the directory to list the contents of.
 		"""
+		del query
 		try:
 			dir_contents = os.listdir(dir_path)
 		except os.error:
@@ -945,11 +947,13 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 
 	def stock_handler_respond_unauthorized(self, query):
 		"""This method provides a handler suitable to be used in the handler_map."""
+		del query
 		self.respond_unauthorized()
 		return
 
 	def stock_handler_respond_not_found(self, query):
 		"""This method provides a handler suitable to be used in the handler_map."""
+		del query
 		self.respond_not_found()
 		return
 
@@ -1170,7 +1174,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		:return: The value if it exists, otherwise *default* will be returned.
 		:rtype: str
 		"""
-		return self.query_data.get(parameter, [default])[0]
+		return self.query_data.get(name, [default])[0]
 
 	def get_content_type_charset(self, default='UTF-8'):
 		"""
