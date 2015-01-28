@@ -42,7 +42,7 @@ setup(
 	version=__version__,
 	author='Spencer McIntyre',
 	url='https://github.com/zeroSteiner/AdvancedHTTPServer',
-	description='Advanced Python HTTP Server Library',
+	description='Standalone web server built on Python\'s BaseHTTPServer',
 	py_modules=['AdvancedHTTPServer'],
 	classifiers=[
 		'Development Status :: 5 - Production/Stable',
