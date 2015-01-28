@@ -54,7 +54,7 @@ expected-line-ending-format=LF
 
 [VARIABLES]
 init-import=no
-callbacks=cb_,_cb
+callbacks=cb_,_cb,signal_
 
 [SIMILARITIES]
 min-similarity-lines=4

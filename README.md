@@ -12,7 +12,8 @@ see the [LICENSE](https://github.com/zeroSteiner/AdvancedHTTPServer/blob/master/
 file.
 
 ## Features
-AdvancedHTTPServer builds on top of Python's include BaseHTTPServer and provides out of the box support for additional commonly needed features such as:
+AdvancedHTTPServer builds on top of Python's included BaseHTTPServer and
+provides out of the box support for additional commonly needed features such as:
  - Threading
  - SSL
  - Registering handler functions to HTTP resources
@@ -20,6 +21,7 @@ AdvancedHTTPServer builds on top of Python's include BaseHTTPServer and provides
  - Forking the server process
  - Basic Authentication
  - The HTTP verbs GET HEAD POST and OPTIONS
+ - RPC over HTTP
 
 ## Dependencies
 AdvancedHTTPServer does not have any additional dependencies outside of the
@@ -36,3 +38,6 @@ documentation can be generated from source with the command
 ```sphinx-build docs/source docs/build```. The latest documentation is
 kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
 [advancedhttpserver.readthedocs.org](https://advancedhttpserver.readthedocs.org/en/latest/).
+
+## Powered By AdvancedHTTPServer
+ - [King Phisher](https://github.com/securestate/king-phisher) Phishing Campaign Toolkit
