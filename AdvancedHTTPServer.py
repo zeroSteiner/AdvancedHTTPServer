@@ -64,7 +64,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.4.2'
+__version__ = '0.4.3'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -247,14 +247,27 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 	"""
 	import argparse
 
+	def _argp_dir_type(arg):
+		if not os.path.isdir(arg):
+			raise argparse.ArgumentTypeError("{0} is not a valid directory".format(repr(arg)))
+		return arg
+
+	def _argp_port_type(arg):
+		if not arg.isdigit():
+			raise argparse.ArgumentTypeError("{0} is not a valid port".format(repr(arg)))
+		arg = int(arg)
+		if arg < 0 or arg > 65535:
+			raise argparse.ArgumentTypeError("{0} is not a valid port".format(repr(arg)))
+		return arg
+
 	description = (description or 'AdvancedHTTPServer')
 	ServerClass = (ServerClass or AdvancedHTTPServer)
 	HandlerClass = (HandlerClass or AdvancedHTTPServerRequestHandler)
 
 	parser = argparse.ArgumentParser(description=description, conflict_handler='resolve')
 	parser.epilog = 'When a config file is specified with --config the --ip, --port and --web-root options are all ignored.'
-	parser.add_argument('-w', '--web-root', dest='web_root', action='store', default='.', help='path to the web root directory')
-	parser.add_argument('-p', '--port', dest='port', action='store', default=8080, type=int, help='port to serve on')
+	parser.add_argument('-w', '--web-root', dest='web_root', action='store', default='.', type=_argp_dir_type, help='path to the web root directory')
+	parser.add_argument('-p', '--port', dest='port', action='store', default=8080, type=_argp_port_type, help='port to serve on')
 	parser.add_argument('-i', '--ip', dest='ip', action='store', default='0.0.0.0', help='the ip address to serve on')
 	parser.add_argument('--password', dest='password', action='store', default=None, help='password to use for basic authentication')
 	parser.add_argument('--log-file', dest='log_file', action='store', default=None, help='log information to a file')
@@ -627,6 +640,7 @@ class AdvancedHTTPServerNonThreaded(http.server.HTTPServer, object):
 
 	def shutdown(self, *args, **kwargs):
 		super(AdvancedHTTPServerNonThreaded, self).shutdown(*args, **kwargs)
+		self.socket.shutdown(socket.SHUT_RDWR)
 		self.socket.close()
 
 class AdvancedHTTPServerThreaded(socketserver.ThreadingMixIn, AdvancedHTTPServerNonThreaded):
