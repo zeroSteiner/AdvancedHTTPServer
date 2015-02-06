@@ -260,11 +260,11 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 			raise argparse.ArgumentTypeError("{0} is not a valid port".format(repr(arg)))
 		return arg
 
-	description = (description or 'AdvancedHTTPServer')
+	description = (description or 'HTTP Server')
 	ServerClass = (ServerClass or AdvancedHTTPServer)
 	HandlerClass = (HandlerClass or AdvancedHTTPServerRequestHandler)
 
-	parser = argparse.ArgumentParser(description=description, conflict_handler='resolve')
+	parser = argparse.ArgumentParser(conflict_handler='resolve', description=description, fromfile_prefix_chars='@')
 	parser.epilog = 'When a config file is specified with --config the --ip, --port and --web-root options are all ignored.'
 	parser.add_argument('-w', '--web-root', dest='web_root', action='store', default='.', type=_argp_dir_type, help='path to the web root directory')
 	parser.add_argument('-p', '--port', dest='port', action='store', default=8080, type=_argp_port_type, help='port to serve on')
