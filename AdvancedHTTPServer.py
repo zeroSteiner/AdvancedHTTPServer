@@ -166,7 +166,7 @@ else:
 				return datetime.datetime.strptime(data, '%Y-%m-%dT%H:%M:%S.%f')
 			else:
 				return datetime.datetime.strptime(data, '%Y-%m-%dT%H:%M:%S')
-		return msfpack.ExtType(code, data)
+		return msgpack.ExtType(code, data)
 	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads': lambda d, e: msgpack.loads(d, encoding=e, ext_hook=_msgpack_ext_hook), 'dumps': lambda d: msgpack.dumps(d, default=_msgpack_default)}
 
 
@@ -408,6 +408,7 @@ class AdvancedHTTPServerRPCError(Exception):
 	in routines executed on the server will raise this error.
 	"""
 	def __init__(self, message, status, remote_exception=None):
+		super(AdvancedHTTPServerRPCError, self).__init__()
 		self.message = message
 		self.status = status
 		self.remote_exception = remote_exception
@@ -675,6 +676,9 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 	})
 
 	def __init__(self, *args, **kwargs):
+		self.cookies = None
+		self.path = None
+		self.wfile = None
 		self.handler_map = {}
 		"""The dict object which maps regular expressions of resources to the functions which should handle them."""
 		self.rpc_handler_map = {}
@@ -870,14 +874,14 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		# abandon query parameters
 		self.path = self.path.split('?', 1)[0]
 		self.path = self.path.split('#', 1)[0]
-		self.original_path = urllib.parse.unquote(self.path)
-		self.path = posixpath.normpath(self.original_path)
+		original_path = urllib.parse.unquote(self.path)
+		self.path = posixpath.normpath(original_path)
 		words = self.path.split('/')
 		words = filter(None, words)
 		tmp_path = ''
 		for word in words:
-			drive, word = os.path.splitdrive(word)
-			head, word = os.path.split(word)
+			_, word = os.path.splitdrive(word)
+			_, word = os.path.split(word)
 			if word in (os.curdir, os.pardir):
 				continue
 			tmp_path = os.path.join(tmp_path, word)
@@ -898,7 +902,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 						getattr(self, handler.__name__)(query)
 					else:
 						handler(self, query)
-				except:
+				except Exception:
 					self.respond_server_error()
 				return
 
@@ -912,7 +916,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			self.respond_file(file_path, query=query)
 			return
 		elif os.path.isdir(file_path) and os.access(file_path, os.R_OK):
-			if not self.original_path.endswith('/'):
+			if not original_path.endswith('/'):
 				# redirect browser, doing what apache does
 				destination = self.path + '/'
 				if self.command == 'GET':
@@ -938,7 +942,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		super(AdvancedHTTPServerRequestHandler, self).end_headers()
 		self.headers_active = False
 		if self.command == 'HEAD':
-			self.wfile.close()
+			self.wfile.close() # pylint: disable=access-member-before-definition
 			self.wfile = open(os.devnull, 'wb')
 
 	def guess_mime_type(self, path):
@@ -950,7 +954,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		:return: The guessed MIME type of the default if non are found.
 		:rtype: str
 		"""
-		base, ext = posixpath.splitext(path)
+		_, ext = posixpath.splitext(path)
 		if ext in self.extensions_map:
 			return self.extensions_map[ext]
 		ext = ext.lower()
@@ -985,11 +989,8 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			if not auth_info:
 				return False
 			auth_info = auth_info.split()
-			if len(auth_info) != 2:
+			if len(auth_info) != 2 or auth_info[0] != 'Basic':
 				return False
-			if auth_info[0] != 'Basic':
-				return False
-
 			auth_info = base64.b64decode(auth_info[1]).decode(sys.getdefaultencoding())
 			username = auth_info.split(':')[0]
 			password = ':'.join(auth_info.split(':')[1:])
@@ -1012,9 +1013,9 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 				self.basic_auth_user = username
 				return True
 			self.server.logger.warning('received invalid password from user: ' + username)
-			return False
-		except:
-			return False
+		except Exception:
+			pass
+		return False
 
 	def cookie_get(self, name):
 		"""
@@ -1070,17 +1071,17 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			if content_type.startswith('application/json'):
 				data = json.loads(data)
 				if isinstance(data, dict):
-					self.query_data = dict(map(lambda i: (i[0], [i[1]]), data.items()))
+					self.query_data = dict([(i[0], [i[1]]) for i in data.items()])
 			else:
 				self.query_data = urllib.parse.parse_qs(data, keep_blank_values=1)
-		except:
+		except Exception:
 			self.respond_server_error(400)
 		else:
 			self.dispatch_handler(self.query_data)
 		return
 
 	def do_OPTIONS(self):
-		available_methods = list(map(lambda x: x[3:], filter(lambda x: x.startswith('do_'), dir(self))))
+		available_methods = list(x[3:] for x in dir(self) if x.startswith('do_'))
 		if 'RPC' in available_methods and len(self.rpc_handler_map) == 0:
 			available_methods.remove('RPC')
 		self.send_response(200)
@@ -1105,7 +1106,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		try:
 			data_length = int(self.headers.get('content-length'))
 			data = self.rfile.read(data_length)
-		except:
+		except Exception:
 			self.send_error(400, 'Invalid Data')
 			return
 
@@ -1130,7 +1131,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 
 		try:
 			data = serializer.loads(data)
-		except:
+		except Exception:
 			self.server.logger.warning('serializer failed to load data')
 			self.send_error(400, 'Invalid Data')
 			return
@@ -1147,7 +1148,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		self.server.logger.info('running RPC method: ' + self.path)
 		response = {'result': None, 'exception_occurred': False}
 		try:
-			result = rpc_handler(*data)
+			result = rpc_handler(*data) # pylint: disable=star-args
 			response['result'] = result
 		except Exception as error:
 			response['exception_occurred'] = True
@@ -1159,7 +1160,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 
 		try:
 			response = serializer.dumps(response)
-		except:
+		except Exception:
 			self.respond_server_error(message='Failed To Pack Response')
 			return
 
@@ -1238,7 +1239,7 @@ class AdvancedHTTPServerSerializer(object):
 			data = data.encode(self._charset)
 		if self._compression == 'zlib':
 			data = zlib.compress(data)
-		assert(isinstance(data, bytes))
+		assert isinstance(data, bytes)
 		return data
 
 	def loads(self, data):
