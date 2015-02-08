@@ -29,11 +29,12 @@
 #  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
+#  pylint: disable=too-many-lines
 
 #  Homepage: https://github.com/zeroSteiner/AdvancedHTTPServer
 #  Author:   Spencer McIntyre (zeroSteiner)
 
-# Config File Example
+# Config file example
 FILE_CONFIG = """
 [server]
 ip = 0.0.0.0
@@ -45,11 +46,11 @@ list_directories = True
 """
 
 # The AdvancedHTTPServer systemd service unit file
-# Quick How To:
-# 1. Copy this file to /etc/systemd/system/pyhttpd.service
-# 2. Edit the run parameters appropriately in the ExecStart option
-# 3. Set configuration settings in /etc/pyhttpd.conf
-# 4. Run "systemctl daemon-reload"
+# Quick how to:
+#   1. Copy this file to /etc/systemd/system/pyhttpd.service
+#   2. Edit the run parameters appropriately in the ExecStart option
+#   3. Set configuration settings in /etc/pyhttpd.conf
+#   4. Run "systemctl daemon-reload"
 FILE_SYSTEMD_SERVICE_UNIT = """
 [Unit]
 Description=Python Advanced HTTP Server
