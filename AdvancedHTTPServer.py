@@ -128,19 +128,36 @@ else:
 
 GLOBAL_HANDLER_MAP = {}
 
-def _json_default(obj):
-	if isinstance(obj, datetime.datetime):
-		return {'__complex_type__': 'datetime.datetime', 'value': obj.isoformat()}
+def _serialize_ext_dump(obj):
+	if obj.__class__ == datetime.date:
+		return 'datetime.date', obj.isoformat()
+	elif obj.__class__ == datetime.datetime:
+		return 'datetime.datetime', obj.isoformat()
+	elif obj.__class__ == datetime.time:
+		return 'datetime.time', obj.isoformat()
 	raise TypeError('Unknown type: ' + repr(obj))
 
-def _json_object_hook(obj):
-	if obj.get('__complex_type__') == 'datetime.datetime':
-		value = obj['value']
-		if '.' in value:
-			return datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S.%f')
+def _serialize_ext_load(obj_type, obj_value, default):
+	if obj_type == 'datetime.date':
+		return datetime.datetime.strptime(obj_value, '%Y-%m-%d').date()
+	elif obj_type == 'datetime.datetime':
+		if '.' in obj_value:
+			return datetime.datetime.strptime(obj_value, '%Y-%m-%dT%H:%M:%S.%f')
 		else:
-			return datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%S')
-	return obj
+			return datetime.datetime.strptime(obj_value, '%Y-%m-%dT%H:%M:%S')
+	elif obj_type == 'datetime.time':
+		if '.' in obj_value:
+			return datetime.datetime.strptime(obj_value, '%H:%M:%S.%f').time()
+		else:
+			return datetime.datetime.strptime(obj_value, '%H:%M:%S').time()
+	return default
+
+def _json_default(obj):
+	obj_type, obj_value = _serialize_ext_dump(obj)
+	return {'__complex_type__': obj_type, 'value': obj_value}
+
+def _json_object_hook(obj):
+	return _serialize_ext_load(obj.get('__complex_type__'), obj.get('value'), obj)
 
 SERIALIZER_DRIVERS = {}
 """Dictionary of available drivers for serialization."""
@@ -151,23 +168,20 @@ try:
 except ImportError:
 	pass
 else:
+	_MSGPACK_EXT_TYPES = {10: 'datetime.datetime', 11: 'datetime.date', 12: 'datetime.time'}
 	def _msgpack_default(obj):
-		if isinstance(obj, datetime.datetime):
-			obj = obj.isoformat()
-			if sys.version_info[0] == 3:
-				obj = obj.encode('utf-8')
-			return msgpack.ExtType(10, obj)
-		raise TypeError('Unknown type: ' + repr(obj))
+		obj_type, obj_value = _serialize_ext_dump(obj)
+		obj_type = next(i[0] for i in _MSGPACK_EXT_TYPES.items() if i[1] == obj_type)
+		if sys.version_info[0] == 3:
+			obj_value = obj_value.encode('utf-8')
+		return msgpack.ExtType(obj_type, obj_value)
 
-	def _msgpack_ext_hook(code, data):
-		if code == 10:
-			if sys.version_info[0] == 3:
-				data = data.decode('utf-8')
-			if '.' in data:
-				return datetime.datetime.strptime(data, '%Y-%m-%dT%H:%M:%S.%f')
-			else:
-				return datetime.datetime.strptime(data, '%Y-%m-%dT%H:%M:%S')
-		return msgpack.ExtType(code, data)
+	def _msgpack_ext_hook(code, obj_value):
+		default = msgpack.ExtType(code, obj_value)
+		if sys.version_info[0] == 3:
+			obj_value = obj_value.decode('utf-8')
+		obj_type = _MSGPACK_EXT_TYPES.get(code)
+		return _serialize_ext_load(obj_type, obj_value, default)
 	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads': lambda d, e: msgpack.loads(d, encoding=e, ext_hook=_msgpack_ext_hook), 'dumps': lambda d: msgpack.dumps(d, default=_msgpack_default)}
 
 
