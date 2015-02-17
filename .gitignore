@@ -9,3 +9,4 @@ build/*
 dist/*
 docs/build
 docs/html
+MANIFEST
