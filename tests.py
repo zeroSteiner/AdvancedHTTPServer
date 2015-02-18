@@ -86,11 +86,16 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 	def _rpc_test_datetime_handler(self):
 		return datetime.datetime.now()
 
+	def _rpc_test_throw_exception(self):
+		raise RuntimeError('this is an error!')
+
 	def setUp(self):
 		self.rpc_test_double = "{0}".format(random_string(40))
 		self.rpc_test_datetime = "{0}".format(random_string(40))
+		self.rpc_test_throw_exception = "{0}".format(random_string(40))
 		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_double), self.handler_class.__name__, is_rpc=True)(self._rpc_test_double_handler)
 		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_datetime), self.handler_class.__name__, is_rpc=True)(self._rpc_test_datetime_handler)
+		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_throw_exception), self.handler_class.__name__, is_rpc=True)(self._rpc_test_throw_exception)
 		super(AdvancedHTTPServerTests, self).setUp()
 
 	def build_rpc_client(self, username=None, password=None, hmac_key=None, cached=False):
@@ -235,6 +240,8 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		number = random.randint(0, 10000)
 		doubled = rpc(self.rpc_test_double, number)
 		self.assertEqual(doubled, number * 2)
+		with self.assertRaisesRegex(AdvancedHTTPServerRPCError, '^a remote exception occurred$'):
+			rpc(self.rpc_test_throw_exception)
 
 if __name__ == '__main__':
 	unittest.main()

@@ -1161,10 +1161,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			response['result'] = result
 		except Exception as error:
 			response['exception_occurred'] = True
-			exc = {}
-			exc['name'] = error.__class__.__name__
-			exc['message'] = error.message
-			response['exception'] = exc
+			response['exception'] = dict(name=error.__class__.__name__, message=getattr(error, 'message', None))
 			self.server.logger.error('error: ' + error.__class__.__name__ + ' occurred while calling RPC method: ' + self.path)
 
 		try:
