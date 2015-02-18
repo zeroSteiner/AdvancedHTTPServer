@@ -40,8 +40,12 @@ import ssl
 import time
 import unittest
 
-from AdvancedHTTPServer import *
+from AdvancedHTTPServer import AdvancedHTTPServerRegisterPath
+from AdvancedHTTPServer import AdvancedHTTPServerRPCClient
+from AdvancedHTTPServer import AdvancedHTTPServerRPCClientCached
+from AdvancedHTTPServer import AdvancedHTTPServerRPCError
 from AdvancedHTTPServer import AdvancedHTTPServerSerializer
+from AdvancedHTTPServer import AdvancedHTTPServerTestCase
 from AdvancedHTTPServer import build_serializer_from_content_type
 from AdvancedHTTPServer import has_msgpack
 from AdvancedHTTPServer import random_string
