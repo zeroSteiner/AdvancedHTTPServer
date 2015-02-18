@@ -43,15 +43,9 @@ import unittest
 from AdvancedHTTPServer import *
 from AdvancedHTTPServer import AdvancedHTTPServerSerializer
 from AdvancedHTTPServer import build_serializer_from_content_type
+from AdvancedHTTPServer import has_msgpack
 from AdvancedHTTPServer import random_string
 from AdvancedHTTPServer import resolve_ssl_protocol_version
-
-try:
-	import msgpack
-except ImportError:
-	has_msgpack = False
-else:
-	has_msgpack = True
 
 if hasattr(logging, 'NullHandler'):
 	null_handler = logging.NullHandler()
@@ -74,18 +68,30 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		response = self.http_request(self.test_resource, 'GET')
 		self.assertHTTPStatus(response, 200)
 
-	def setUp(self):
-		self.rpc_test_double = "{0}".format(random_string(40))
-		self.rpc_test_datetime = "{0}".format(random_string(40))
-		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_double), self.handler_class.__name__, is_rpc=True)(self._rpc_test_double_handler)
-		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_datetime), self.handler_class.__name__, is_rpc=True)(self._rpc_test_datetime_handler)
-		super(AdvancedHTTPServerTests, self).setUp()
+	def _test_serializer_obj(self, serializer, obj, klass):
+		obj_encoded = serializer.dumps(obj)
+		obj_decoded = serializer.loads(obj_encoded)
+		self.assertTrue(obj_decoded.__class__ == klass)
+		self.assertNotEqual(obj_encoded, obj_decoded)
+		self.assertEqual(obj_decoded, obj)
+
+	def _test_serializer_hooks(self, serializer):
+		self._test_serializer_obj(serializer, datetime.datetime.utcnow(), datetime.datetime)
+		self._test_serializer_obj(serializer, datetime.datetime.utcnow().date(), datetime.date)
+		self._test_serializer_obj(serializer, datetime.datetime.utcnow().time(), datetime.time)
 
 	def _rpc_test_double_handler(self, value):
 		return value * 2
 
 	def _rpc_test_datetime_handler(self):
 		return datetime.datetime.now()
+
+	def setUp(self):
+		self.rpc_test_double = "{0}".format(random_string(40))
+		self.rpc_test_datetime = "{0}".format(random_string(40))
+		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_double), self.handler_class.__name__, is_rpc=True)(self._rpc_test_double_handler)
+		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_datetime), self.handler_class.__name__, is_rpc=True)(self._rpc_test_datetime_handler)
+		super(AdvancedHTTPServerTests, self).setUp()
 
 	def build_rpc_client(self, username=None, password=None, hmac_key=None, cached=False):
 		if cached:
@@ -122,17 +128,10 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		response = self.http_request('/' + random_string(30), 'POST')
 		self.assertHTTPStatus(response, 404)
 
-	def run_rpc_tests(self, rpc):
-		dt = rpc(self.rpc_test_datetime)
-		self.assertIsInstance(dt, datetime.datetime)
-		number = random.randint(0, 10000)
-		doubled = rpc(self.rpc_test_double, number)
-		self.assertEqual(doubled, number * 2)
-
 	def test_resolve_ssl_protocol_version(self):
 		default_version = resolve_ssl_protocol_version()
 		self.assertTrue(isinstance(default_version, int))
-		for version_constant in filter(lambda a: a.startswith('PROTOCOL_'), dir(ssl)):
+		for version_constant in (a for a in dir(ssl) if a.startswith('PROTOCOL_')):
 			version_name = version_constant[9:]
 			version = getattr(ssl, version_constant)
 			self.assertEqual(resolve_ssl_protocol_version(version_name), version)
@@ -198,20 +197,12 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 
 	def test_serializer_json(self):
 		serializer = AdvancedHTTPServerSerializer('application/json')
-		dt = datetime.datetime.utcnow()
-		dt_encoded = serializer.dumps(dt)
-		dt_decoded = serializer.loads(dt_encoded)
-		self.assertNotEqual(dt_encoded, dt_decoded)
-		self.assertEqual(dt_decoded, dt)
+		self._test_serializer_hooks(serializer)
 
 	@unittest.skipUnless(has_msgpack, 'this test requires msgpack')
 	def test_serializer_msgpack(self):
 		serializer = AdvancedHTTPServerSerializer('binary/message-pack')
-		dt = datetime.datetime.utcnow()
-		dt_encoded = serializer.dumps(dt)
-		dt_decoded = serializer.loads(dt_encoded)
-		self.assertNotEqual(dt_encoded, dt_decoded)
-		self.assertEqual(dt_decoded, dt)
+		self._test_serializer_hooks(serializer)
 
 	def test_verb_fake(self):
 		response = self.http_request(self.test_resource, 'FAKE')
@@ -237,6 +228,13 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		should_allow = set(['POST', 'HEAD', 'RPC', 'OPTIONS', 'GET'])
 		real_allow = set(allow_header.split(', '))
 		self.assertSetEqual(real_allow, should_allow)
+
+	def run_rpc_tests(self, rpc):
+		dt = rpc(self.rpc_test_datetime)
+		self.assertIsInstance(dt, datetime.datetime)
+		number = random.randint(0, 10000)
+		doubled = rpc(self.rpc_test_double, number)
+		self.assertEqual(doubled, number * 2)
 
 if __name__ == '__main__':
 	unittest.main()

@@ -141,15 +141,9 @@ def _serialize_ext_load(obj_type, obj_value, default):
 	if obj_type == 'datetime.date':
 		return datetime.datetime.strptime(obj_value, '%Y-%m-%d').date()
 	elif obj_type == 'datetime.datetime':
-		if '.' in obj_value:
-			return datetime.datetime.strptime(obj_value, '%Y-%m-%dT%H:%M:%S.%f')
-		else:
-			return datetime.datetime.strptime(obj_value, '%Y-%m-%dT%H:%M:%S')
+		return datetime.datetime.strptime(obj_value, '%Y-%m-%dT%H:%M:%S' + ('.%f' if '.' in obj_value else ''))
 	elif obj_type == 'datetime.time':
-		if '.' in obj_value:
-			return datetime.datetime.strptime(obj_value, '%H:%M:%S.%f').time()
-		else:
-			return datetime.datetime.strptime(obj_value, '%H:%M:%S').time()
+		return datetime.datetime.strptime(obj_value, '%H:%M:%S' + ('.%f' if '.' in obj_value else '')).time()
 	return default
 
 def _json_default(obj):
@@ -166,8 +160,9 @@ SERIALIZER_DRIVERS['application/json'] = {'loads': lambda d, e: json.loads(d, ob
 try:
 	import msgpack
 except ImportError:
-	pass
+	has_msgpack = False
 else:
+	has_msgpack = True
 	_MSGPACK_EXT_TYPES = {10: 'datetime.datetime', 11: 'datetime.date', 12: 'datetime.time'}
 	def _msgpack_default(obj):
 		obj_type, obj_value = _serialize_ext_dump(obj)
@@ -183,7 +178,6 @@ else:
 		obj_type = _MSGPACK_EXT_TYPES.get(code)
 		return _serialize_ext_load(obj_type, obj_value, default)
 	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads': lambda d, e: msgpack.loads(d, encoding=e, ext_hook=_msgpack_ext_hook), 'dumps': lambda d: msgpack.dumps(d, default=_msgpack_default)}
-
 
 if hasattr(logging, 'NullHandler'):
 	logging.getLogger('AdvancedHTTPServer').addHandler(logging.NullHandler())
