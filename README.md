@@ -35,7 +35,7 @@ The following version of Python are currently supported:
 ## Code Documentation
 AdvancedHTTPServer uses Sphinx for internal code documentation. This
 documentation can be generated from source with the command
-```sphinx-build docs/source docs/build```. The latest documentation is
+```sphinx-build docs/source docs/html```. The latest documentation is
 kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
 [advancedhttpserver.readthedocs.org](https://advancedhttpserver.readthedocs.org/en/latest/).
 
