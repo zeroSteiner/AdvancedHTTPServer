@@ -576,14 +576,17 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		"""
 		Call a remote method and store the result locally. Subsequent
 		calls to the same method with the same arguments will return the
-		cached result without invoking the remote procedure.
+		cached result without invoking the remote procedure. Cached results are
+		kept indefinitely and must be manually refreshed with a call to
+		:py:meth:`.cache_call_refresh`.
 
 		:param str method: The name of the remote procedure to execute.
 		:return: The return value from the remote function.
 		"""
 		options_hash = hashlib.new('sha1', self.encode(options)).hexdigest()
-		cursor = self.cache_db.cursor()
 
+		self.lock.acquire()
+		cursor = self.cache_db.cursor()
 		cursor.execute('SELECT return_value FROM cache WHERE method = ? AND options_hash = ?', (method, options_hash))
 		return_value = cursor.fetchone()
 		if return_value:
@@ -592,6 +595,7 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 			return_value = self.call(method, *options)
 			cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, self.cache_serializer_dumps(return_value)))
 			self.cache_db.commit()
+		self.lock.release()
 		return return_value
 
 	def cache_call_refresh(self, method, *options):
@@ -603,18 +607,22 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		:return: The return value from the remote function.
 		"""
 		options_hash = hashlib.new('sha1', self.encode(options)).hexdigest()
+		self.lock.acquire()
 		cursor = self.cache_db.cursor()
 		cursor.execute('DELETE FROM cache WHERE method = ? AND options_hash = ?', (method, options_hash))
 		return_value = self.call(method, *options)
 		cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, self.cache_serializer_dumps(return_value)))
 		self.cache_db.commit()
+		self.lock.release()
 		return return_value
 
 	def cache_clear(self):
 		"""Purge the local store of all cached function information."""
+		self.lock.acquire()
 		cursor = self.cache_db.cursor()
 		cursor.execute('DELETE FROM cache')
 		self.cache_db.commit()
+		self.lock.release()
 		self.logger.info('the RPC cache has been clared')
 		return
 
