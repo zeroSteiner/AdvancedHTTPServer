@@ -20,52 +20,52 @@ Data
 Functions
 ---------
 
-.. autofunction:: AdvancedHTTPServer.build_serializer_from_content_type
+.. autofunction:: build_serializer_from_content_type
 
-.. autofunction:: AdvancedHTTPServer.build_server_from_argparser
+.. autofunction:: build_server_from_argparser
 
-.. autofunction:: AdvancedHTTPServer.build_server_from_config
+.. autofunction:: build_server_from_config
 
-.. autofunction:: AdvancedHTTPServer.random_string
+.. autofunction:: random_string
 
-.. autofunction:: AdvancedHTTPServer.resolve_ssl_protocol_version
+.. autofunction:: resolve_ssl_protocol_version
 
 Classes
 -------
 
-.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServer
+.. autoclass:: AdvancedHTTPServer
    :members:
    :special-members: __init__
    :undoc-members:
 
-.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerRegisterPath
+.. autoclass:: AdvancedHTTPServerRegisterPath
    :members:
    :special-members: __init__
    :undoc-members:
 
-.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerRequestHandler
+.. autoclass:: AdvancedHTTPServerRequestHandler
    :members:
 
-.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerRPCClient
-   :members:
-   :special-members: __init__
-   :undoc-members:
-
-.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerRPCClientCached
-   :members:
-   :undoc-members:
-
-.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerSerializer
+.. autoclass:: AdvancedHTTPServerRPCClient
    :members:
    :special-members: __init__
    :undoc-members:
 
-.. autoclass:: AdvancedHTTPServer.AdvancedHTTPServerTestCase
+.. autoclass:: AdvancedHTTPServerRPCClientCached
+   :members:
+   :undoc-members:
+
+.. autoclass:: AdvancedHTTPServerSerializer
+   :members:
+   :special-members: __init__
+   :undoc-members:
+
+.. autoclass:: AdvancedHTTPServerTestCase
    :members:
 
 Exceptions
 ----------
 
-.. autoexception:: AdvancedHTTPServer.AdvancedHTTPServerRPCError
+.. autoexception:: AdvancedHTTPServerRPCError
    :members:
    :undoc-members:

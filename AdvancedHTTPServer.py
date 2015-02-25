@@ -1331,7 +1331,7 @@ class AdvancedHTTPServer(object):
 	def serve_forever(self, fork=False):
 		"""
 		Start handling requests. This method must be called and does not
-		return unless the :py:func:`.shutdown` method is called from
+		return unless the :py:meth:`.shutdown` method is called from
 		another thread.
 
 		:param bool fork: Whether to fork or not before serving content.
