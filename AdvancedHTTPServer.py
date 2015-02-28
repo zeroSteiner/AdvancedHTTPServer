@@ -568,10 +568,8 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		super(AdvancedHTTPServerRPCClientCached, self).__init__(*args, **kwargs)
 		self.cache_db = sqlite3.connect(cache_db, check_same_thread=False)
 		cursor = self.cache_db.cursor()
-		cursor.execute('CREATE TABLE IF NOT EXISTS cache (method TEXT NOT NULL, options_hash BLOB NOT NULL, return_value TEXT NOT NULL)')
+		cursor.execute('CREATE TABLE IF NOT EXISTS cache (method TEXT NOT NULL, options_hash BLOB NOT NULL, return_value BLOB NOT NULL)')
 		self.cache_db.commit()
-		self.cache_serializer_loads = SERIALIZER_DRIVERS['application/json']['loads']
-		self.cache_serializer_dumps = SERIALIZER_DRIVERS['application/json']['dumps']
 		self.cache_lock = threading.Lock()
 
 	def cache_call(self, method, *options):
@@ -588,19 +586,20 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		options_hash = self.encode(options)
 		if len(options_hash) > 20:
 			options_hash = hashlib.new('sha1', options_hash).digest()
-		if sys.version_info[0] == 2:
-			options_hash = buffer(options_hash)
+		options_hash = sqlite3.Binary(options_hash)
 
 		with self.cache_lock:
 			cursor = self.cache_db.cursor()
 			cursor.execute('SELECT return_value FROM cache WHERE method = ? AND options_hash = ?', (method, options_hash))
 			return_value = cursor.fetchone()
 		if return_value:
-			return self.cache_serializer_loads(return_value[0], 'UTF-8')
+			return_value = bytes(return_value[0])
+			return self.decode(return_value)
 		return_value = self.call(method, *options)
+		store_return_value = sqlite3.Binary(self.encode(return_value))
 		with self.cache_lock:
 			cursor = self.cache_db.cursor()
-			cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, self.cache_serializer_dumps(return_value)))
+			cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, store_return_value))
 			self.cache_db.commit()
 		return return_value
 
@@ -615,16 +614,16 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		options_hash = self.encode(options)
 		if len(options_hash) > 20:
 			options_hash = hashlib.new('sha1', options).digest()
-		if sys.version_info[0] == 2:
-			options_hash = buffer(options_hash)
+		options_hash = sqlite3.Binary(options_hash)
 
 		with self.cache_lock:
 			cursor = self.cache_db.cursor()
 			cursor.execute('DELETE FROM cache WHERE method = ? AND options_hash = ?', (method, options_hash))
 		return_value = self.call(method, *options)
+		return_value = sqlite3.Binary(self.encode(return_value))
 		with self.cache_lock:
 			cursor = self.cache_db.cursor()
-			cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, self.cache_serializer_dumps(return_value)))
+			cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, return_value))
 			self.cache_db.commit()
 		return return_value
 
