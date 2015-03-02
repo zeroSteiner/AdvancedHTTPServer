@@ -20,8 +20,6 @@ Data
 Functions
 ---------
 
-.. autofunction:: build_serializer_from_content_type
-
 .. autofunction:: build_server_from_argparser
 
 .. autofunction:: build_server_from_config

@@ -215,31 +215,6 @@ def resolve_ssl_protocol_version(version=None):
 		return getattr(ssl, 'PROTOCOL_' + version)
 	raise TypeError("ssl_version() argument 1 must be str, not {0}".format(type(version).__name__))
 
-def build_serializer_from_content_type(content_type):
-	"""
-	Build a serializer object from a MIME Content-Type string.
-
-	:param str content_type: The Content-Type string to parse.
-	:return: A new configured serializer instance.
-	:rtype: :py:class:`.AdvancedHTTPServerSerializer`
-	"""
-	name = content_type
-	options = {}
-	if ';' in content_type:
-		name, options_str = content_type.split(';', 1)
-		for part in options_str.split(';'):
-			part = part.strip()
-			if '=' in part:
-				key, value = part.split('=')
-			else:
-				key, value = (part, None)
-			options[key] = value
-	# old style compatibility
-	if name.endswith('+zlib'):
-		options['compression'] = 'zlib'
-		name = name[:-5]
-	return AdvancedHTTPServerSerializer(name, charset=options.get('charset', 'UTF-8'), compression=options.get('compression'))
-
 def build_server_from_argparser(description=None, ServerClass=None, HandlerClass=None):
 	"""
 	Build a server from command line arguments. If a ServerClass or
@@ -668,7 +643,10 @@ class AdvancedHTTPServerNonThreaded(http.server.HTTPServer, object):
 
 	def shutdown(self, *args, **kwargs):
 		super(AdvancedHTTPServerNonThreaded, self).shutdown(*args, **kwargs)
-		self.socket.shutdown(socket.SHUT_RDWR)
+		try:
+			self.socket.shutdown(socket.SHUT_RDWR)
+		except socket.error:
+			pass
 		self.socket.close()
 
 class AdvancedHTTPServerThreaded(socketserver.ThreadingMixIn, AdvancedHTTPServerNonThreaded):
@@ -1151,7 +1129,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 				return
 
 		try:
-			serializer = build_serializer_from_content_type(content_type)
+			serializer = AdvancedHTTPServerSerializer.from_content_type(content_type)
 		except ValueError:
 			self.send_error(400, 'Invalid Content-Type')
 			return
@@ -1249,6 +1227,32 @@ class AdvancedHTTPServerSerializer(object):
 		self.content_type = "{0}; charset={1}".format(self.name, self._charset)
 		if self._compression:
 			self.content_type += '; compression=' + self._compression
+
+	@classmethod
+	def from_content_type(cls, content_type):
+		"""
+		Build a serializer object from a MIME Content-Type string.
+
+		:param str content_type: The Content-Type string to parse.
+		:return: A new serializer instance.
+		:rtype: :py:class:`.AdvancedHTTPServerSerializer`
+		"""
+		name = content_type
+		options = {}
+		if ';' in content_type:
+			name, options_str = content_type.split(';', 1)
+			for part in options_str.split(';'):
+				part = part.strip()
+				if '=' in part:
+					key, value = part.split('=')
+				else:
+					key, value = (part, None)
+				options[key] = value
+		# old style compatibility
+		if name.endswith('+zlib'):
+			options['compression'] = 'zlib'
+			name = name[:-5]
+		return cls(name, charset=options.get('charset', 'UTF-8'), compression=options.get('compression'))
 
 	def dumps(self, data):
 		"""

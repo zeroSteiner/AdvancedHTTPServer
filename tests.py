@@ -46,7 +46,6 @@ from AdvancedHTTPServer import AdvancedHTTPServerRPCClientCached
 from AdvancedHTTPServer import AdvancedHTTPServerRPCError
 from AdvancedHTTPServer import AdvancedHTTPServerSerializer
 from AdvancedHTTPServer import AdvancedHTTPServerTestCase
-from AdvancedHTTPServer import build_serializer_from_content_type
 from AdvancedHTTPServer import has_msgpack
 from AdvancedHTTPServer import random_string
 from AdvancedHTTPServer import resolve_ssl_protocol_version
@@ -200,7 +199,7 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.run_rpc_tests(rpc)
 
 	def test_serializer_build(self):
-		serializer = build_serializer_from_content_type('application/json')
+		serializer = AdvancedHTTPServerSerializer.from_content_type('application/json')
 		self.assertIsInstance(serializer, AdvancedHTTPServerSerializer)
 		self.assertEqual(serializer.name, 'application/json')
 
