@@ -6,7 +6,7 @@ python:
   - "3.4"
 
 install:
-  - pip install msgpack-python pylint sphinx
+  - pip install msgpack-python pylint sphinx==1.2.2
 
 script:
   - pylint --rcfile .pylintrc AdvancedHTTPServer.py

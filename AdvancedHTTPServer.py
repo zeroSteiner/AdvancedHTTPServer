@@ -595,10 +595,10 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 			cursor = self.cache_db.cursor()
 			cursor.execute('DELETE FROM cache WHERE method = ? AND options_hash = ?', (method, options_hash))
 		return_value = self.call(method, *options)
-		return_value = sqlite3.Binary(self.encode(return_value))
+		store_return_value = sqlite3.Binary(self.encode(return_value))
 		with self.cache_lock:
 			cursor = self.cache_db.cursor()
-			cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, return_value))
+			cursor.execute('INSERT INTO cache (method, options_hash, return_value) VALUES (?, ?, ?)', (method, options_hash, store_return_value))
 			self.cache_db.commit()
 		return return_value
 
@@ -1153,7 +1153,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		self.server.logger.info('running RPC method: ' + self.path)
 		response = {'result': None, 'exception_occurred': False}
 		try:
-			result = rpc_handler(*data) # pylint: disable=star-args
+			result = rpc_handler(*data)
 			response['result'] = result
 		except Exception as error:
 			response['exception_occurred'] = True
