@@ -41,8 +41,9 @@ setup(
 	name='AdvancedHTTPServer',
 	version=__version__,
 	author='Spencer McIntyre',
-	url='https://github.com/zeroSteiner/AdvancedHTTPServer',
 	description='Standalone web server built on Python\'s BaseHTTPServer',
+	url='https://github.com/zeroSteiner/AdvancedHTTPServer',
+	license='BSD',
 	py_modules=['AdvancedHTTPServer'],
 	classifiers=[
 		'Development Status :: 5 - Production/Stable',
@@ -56,6 +57,7 @@ setup(
 		'Programming Language :: Python :: 2.7',
 		'Programming Language :: Python :: 3.3',
 		'Programming Language :: Python :: 3.4',
-		'Topic :: Internet :: WWW/HTTP :: HTTP Servers'
+		'Topic :: Internet :: WWW/HTTP :: HTTP Servers',
+		'Topic :: Software Development :: Libraries :: Python Modules'
 	]
 )

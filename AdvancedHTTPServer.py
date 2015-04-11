@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '0.4.3'
+__version__ = '1.0.0'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
