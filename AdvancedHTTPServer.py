@@ -984,6 +984,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		"""
 		Check for the presence of a basic auth Authorization header and
 		if the credentials contained within in are valid.
+
 		:return: Whether or not the credentials are valid.
 		:rtype: bool
 		"""
