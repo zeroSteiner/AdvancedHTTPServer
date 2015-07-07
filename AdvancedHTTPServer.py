@@ -65,7 +65,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -486,7 +486,7 @@ class AdvancedHTTPServerRPCClient(object):
 			self.client = http.client.HTTPConnection(self.host, self.port)
 		self.lock.release()
 
-	def call(self, method, *options):
+	def call(self, method, *args, **kwargs):
 		"""
 		Issue a call to the remote end point to execute the specified
 		procedure.
@@ -494,7 +494,7 @@ class AdvancedHTTPServerRPCClient(object):
 		:param str method: The name of the remote procedure to execute.
 		:return: The return value from the remote function.
 		"""
-		options = self.encode(options)
+		options = self.encode(dict(args=args, kwargs=kwargs))
 
 		headers = {}
 		headers['Content-Type'] = self.serializer.content_type
@@ -511,7 +511,7 @@ class AdvancedHTTPServerRPCClient(object):
 		method = os.path.join(self.uri_base, method)
 		self.logger.debug('calling RPC method: ' + method[1:])
 		with self.lock:
-			self.client.request("RPC", method, options, headers)
+			self.client.request('RPC', method, options, headers)
 			resp = self.client.getresponse()
 		if resp.status != 200:
 			raise AdvancedHTTPServerRPCError(resp.reason, resp.status)
@@ -1141,6 +1141,17 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			self.send_error(400, 'Invalid Data')
 			return
 
+		if isinstance(data, (list, tuple)):
+			meth_args = data
+			meth_kwargs = {}
+		elif isinstance(data, dict):
+			meth_args = data.get('args', ())
+			meth_kwargs = data.get('kwargs', {})
+		else:
+			self.server.logger.warning('received data does not match the calling convention')
+			self.send_error(400, 'Invalid Data')
+			return
+
 		rpc_handler = None
 		for (path_regex, handler) in self.rpc_handler_map.items():
 			if re.match(path_regex, self.path):
@@ -1153,8 +1164,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		self.server.logger.info('running RPC method: ' + self.path)
 		response = {'result': None, 'exception_occurred': False}
 		try:
-			result = rpc_handler(*data)
-			response['result'] = result
+			response['result'] = rpc_handler(*meth_args, **meth_kwargs)
 		except Exception as error:
 			response['exception_occurred'] = True
 			exc_name = "{0}.{1}".format(error.__class__.__module__, error.__class__.__name__)
