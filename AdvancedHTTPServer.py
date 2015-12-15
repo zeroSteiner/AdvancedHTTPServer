@@ -43,6 +43,7 @@ web_root = /var/www/html
 list_directories = True
 # Set an ssl_cert to enable SSL
 # ssl_cert = /path/to/cert.pem
+# ssl_key = /path/to/cert.key
 """
 
 # The AdvancedHTTPServer systemd service unit file
@@ -65,7 +66,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '1.1.0'
+__version__ = '1.2.0'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -249,15 +250,19 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 	HandlerClass = (HandlerClass or AdvancedHTTPServerRequestHandler)
 
 	parser = argparse.ArgumentParser(conflict_handler='resolve', description=description, fromfile_prefix_chars='@')
-	parser.epilog = 'When a config file is specified with --config the --ip, --port and --web-root options are all ignored.'
-	parser.add_argument('-w', '--web-root', dest='web_root', action='store', default='.', type=_argp_dir_type, help='path to the web root directory')
-	parser.add_argument('-p', '--port', dest='port', action='store', default=8080, type=_argp_port_type, help='port to serve on')
-	parser.add_argument('-i', '--ip', dest='ip', action='store', default='0.0.0.0', help='the ip address to serve on')
-	parser.add_argument('--password', dest='password', action='store', default=None, help='password to use for basic authentication')
-	parser.add_argument('--log-file', dest='log_file', action='store', default=None, help='log information to a file')
-	parser.add_argument('-c', '--conf', dest='config', action='store', default=None, type=argparse.FileType('r'), help='read settings from a config file')
+	parser.epilog = 'When a config file is specified with --config only the --log, --log-file and --password options will be used.'
+	parser.add_argument('-c', '--conf', dest='config', type=argparse.FileType('r'), help='read settings from a config file')
+	parser.add_argument('-i', '--ip', dest='ip', default='0.0.0.0', help='the ip address to serve on')
+	parser.add_argument('-L', '--log', dest='loglvl', choices=('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'), default='INFO', help='set the logging level')
+	parser.add_argument('-p', '--port', dest='port', default=8080, type=_argp_port_type, help='port to serve on')
 	parser.add_argument('-v', '--version', action='version', version=parser.prog + ' Version: ' + __version__)
-	parser.add_argument('-L', '--log', dest='loglvl', action='store', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO', help='set the logging level')
+	parser.add_argument('-w', '--web-root', dest='web_root', default='.', type=_argp_dir_type, help='path to the web root directory')
+	parser.add_argument('--log-file', dest='log_file', help='log information to a file')
+	parser.add_argument('--password', dest='password', help='password to use for basic authentication')
+	ssl_group = parser.add_argument_group('ssl options')
+	ssl_group.add_argument('--ssl-cert', dest='ssl_cert', help='the ssl cert to use')
+	ssl_group.add_argument('--ssl-key', dest='ssl_key', help='the ssl key to use')
+	ssl_group.add_argument('--ssl-version', dest='ssl_version', choices=[p[9:] for p in dir(ssl) if p.startswith('PROTOCOL_')], help='the version of ssl to use')
 	arguments = parser.parse_args()
 
 	logging.getLogger('').setLevel(logging.DEBUG)
@@ -276,9 +281,20 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 	if arguments.config:
 		config = ConfigParser()
 		config.readfp(arguments.config)
-		server = build_server_from_config(config, 'server', ServerClass=ServerClass, HandlerClass=HandlerClass)
+		server = build_server_from_config(
+			config,
+			'server',
+			ServerClass=ServerClass,
+			HandlerClass=HandlerClass
+		)
 	else:
-		server = ServerClass(HandlerClass, address=(arguments.ip, arguments.port))
+		server = ServerClass(
+			HandlerClass,
+			address=(arguments.ip, arguments.port),
+			ssl_certfile=arguments.ssl_cert,
+			ssl_keyfile=arguments.ssl_key,
+			ssl_version=arguments.ssl_version
+		)
 		server.serve_files_root = arguments.web_root
 
 	if arguments.password:
@@ -1202,11 +1218,11 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		self.wfile.write(response)
 		return
 
-	def log_error(self, format, *args):
-		self.server.logger.warning(self.address_string() + ' ' + format % args)
+	def log_error(self, msg_format, *args):
+		self.server.logger.warning(self.address_string() + ' ' + msg_format % args)
 
-	def log_message(self, format, *args):
-		self.server.logger.info(self.address_string() + ' ' + format % args)
+	def log_message(self, msg_format, *args):
+		self.server.logger.info(self.address_string() + ' ' + msg_format % args)
 
 	def get_query(self, name, default=None):
 		"""
