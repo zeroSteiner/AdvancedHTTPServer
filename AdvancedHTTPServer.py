@@ -44,6 +44,7 @@ list_directories = True
 # Set an ssl_cert to enable SSL
 # ssl_cert = /path/to/cert.pem
 # ssl_key = /path/to/cert.key
+# ssl_version = TLSv1
 """
 
 # The AdvancedHTTPServer systemd service unit file
@@ -335,7 +336,10 @@ def build_server_from_config(config, section_name, ServerClass=None, HandlerClas
 	ssl_keyfile = None
 	if config.has_option(section_name, 'ssl_key'):
 		ssl_keyfile = config.get(section_name, 'ssl_key')
-	server = ServerClass(HandlerClass, address=(ip, port), ssl_certfile=ssl_certfile, ssl_keyfile=ssl_keyfile)
+	ssl_version = None
+	if config.has_option(section_name, 'ssl_version'):
+		ssl_version = config.get(section_name, 'ssl_version')
+	server = ServerClass(HandlerClass, address=(ip, port), ssl_certfile=ssl_certfile, ssl_keyfile=ssl_keyfile, ssl_version=ssl_version)
 
 	if config.has_option(section_name, 'password_type'):
 		password_type = config.get(section_name, 'password_type')
