@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-#  demo.py
+#  redirect.py
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are
@@ -30,47 +30,40 @@
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+import argparse
 import logging
 import sys
 
 from AdvancedHTTPServer import *
 from AdvancedHTTPServer import __version__
 
-class DemoHandler(AdvancedHTTPServerRequestHandler):
+class RedirectHandler(AdvancedHTTPServerRequestHandler):
+	target_url = 'http://127.0.0.1'
 	def install_handlers(self):
-		self.handler_map['^redirect_to_google$'] = lambda handler, query: self.respond_redirect('http://www.google.com/')
-		self.handler_map['^hello_world$'] = self.res_hello_world
-		self.handler_map['^exception$'] = self.res_exception
+		self.handler_map['.*'] = self.redirect
 
-		self.rpc_handler_map['/xor'] = self.rpc_xor
-
-	def res_hello_world(self, query):
-		message = 'Hello World!\r\n\r\n'
-		self.send_response(200)
-		self.send_header('Content-Length', len(message))
+	def redirect(self, query):
+		print(self.path)
+		self.send_response(302)
+		self.send_header('Location', self.target_url)
 		self.end_headers()
-		if self.basic_auth_user:
-			self.wfile.write('Username: ' + self.basic_auth_user + '\r\n')
-		self.wfile.write(message)
 		return
 
-	def rpc_xor(self, key, data):
-		return ''.join(map(lambda x: chr(ord(x) ^ key), data))
-
-	def res_exception(self, query):
-		raise Exception('this is an exception, oh noes!')
-
 def main():
+	parser = argparse.ArgumentParser(description='AdvancedHTTPServer Redirect', conflict_handler='resolve', version=__version__)
+	parser.add_argument('target_url', help='the url to redirect to')
+	arguments = parser.parse_args()
+
+	RedirectHandler.target_url = arguments.target_url
 	print("AdvancedHTTPServer version: {0}".format(__version__))
+	print('Redirecting to: ' + arguments.target_url)
 	logging.getLogger('').setLevel(logging.DEBUG)
 	console_log_handler = logging.StreamHandler()
 	console_log_handler.setLevel(logging.INFO)
 	console_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s"))
 	logging.getLogger('').addHandler(console_log_handler)
 
-	server = AdvancedHTTPServer(DemoHandler)
-	#server.auth_add_creds('demouser', 'demopass')
-	server.server_version = 'AdvancedHTTPServerDemo'
+	server = AdvancedHTTPServer(RedirectHandler)
 	try:
 		server.serve_forever()
 	except KeyboardInterrupt:
