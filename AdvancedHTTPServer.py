@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '1.2.0'
+__version__ = '1.2.1'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -935,8 +935,11 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		self.cookies = http.cookies.SimpleCookie(self.headers.get('cookie', ''))
 		for (path_regex, handler) in self.handler_map.items():
 			if re.match(path_regex, self.path):
+				self_handler = None
+				if hasattr(handler, '__name__'):
+					self_handler = getattr(self, handler.__name__, None)
 				try:
-					if hasattr(self, handler.__name__) and (handler == getattr(self, handler.__name__).__func__ or handler == getattr(self, handler.__name__)):
+					if self_handler is not None and (handler == self_handler.__func__ or handler == self_handler):
 						getattr(self, handler.__name__)(query)
 					else:
 						handler(self, query)
