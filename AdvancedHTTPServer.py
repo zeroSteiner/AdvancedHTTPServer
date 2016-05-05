@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '1.2.1'
+__version__ = '2.0.0b0'
 __all__ = [
 	'AdvancedHTTPServer',
 	'AdvancedHTTPServerRegisterPath',
@@ -84,7 +84,6 @@ import base64
 import binascii
 import datetime
 import hashlib
-import hmac
 import io
 import json
 import logging
@@ -445,14 +444,13 @@ class AdvancedHTTPServerRPCClient(object):
 	This object uses locks internally to be thread safe. Only one thread
 	can execute a function at a time.
 	"""
-	def __init__(self, address, use_ssl=False, username=None, password=None, uri_base='/', hmac_key=None):
+	def __init__(self, address, use_ssl=False, username=None, password=None, uri_base='/'):
 		"""
 		:param tuple address: The address of the server to conenct to as (host, port).
 		:param bool use_ssl: Whether to connect with SSL or not.
 		:param str username: The username to authenticate with.
 		:param str password: The password to authenticate with.
 		:param str uri_base: An optional prefix for all methods.
-		:param str hmac_key: An HMAC key to use for request authentication.
 		"""
 		self.host = str(address[0])
 		self.port = int(address[1])
@@ -465,9 +463,6 @@ class AdvancedHTTPServerRPCClient(object):
 		self.uri_base = str(uri_base)
 		self.username = (None if username is None else str(username))
 		self.password = (None if password is None else str(password))
-		if isinstance(hmac_key, str):
-			hmac_key = hmac_key.encode('UTF-8')
-		self.hmac_key = hmac_key
 		self.lock = threading.Lock()
 		"""A :py:class:`threading.Lock` instance used to synchronize operations."""
 		self.serializer = None
@@ -477,7 +472,7 @@ class AdvancedHTTPServerRPCClient(object):
 
 	def __reduce__(self):
 		address = (self.host, self.port)
-		return (self.__class__, (address, self.use_ssl, self.username, self.password, self.uri_base, self.hmac_key))
+		return (self.__class__, (address, self.use_ssl, self.username, self.password, self.uri_base))
 
 	def set_serializer(self, serializer_name, compression=None):
 		"""
@@ -530,11 +525,6 @@ class AdvancedHTTPServerRPCClient(object):
 		headers['Content-Type'] = self.serializer.content_type
 		headers['Content-Length'] = str(len(options))
 
-		if self.hmac_key is not None:
-			hmac_calculator = hmac.new(self.hmac_key, digestmod=hashlib.sha1)
-			hmac_calculator.update(options)
-			headers['X-RPC-HMAC'] = hmac_calculator.hexdigest()
-
 		if self.username is not None and self.password is not None:
 			headers['Authorization'] = 'Basic ' + base64.b64encode((self.username + ':' + self.password).encode('UTF-8')).decode('UTF-8')
 
@@ -550,15 +540,6 @@ class AdvancedHTTPServerRPCClient(object):
 			raise AdvancedHTTPServerRPCError(resp.reason, resp.status)
 
 		resp_data = resp.read()
-		if self.hmac_key is not None:
-			hmac_digest = resp.getheader('X-RPC-HMAC')
-			if not isinstance(hmac_digest, str):
-				raise AdvancedHTTPServerRPCError('hmac validation error', resp.status)
-			hmac_digest = hmac_digest.lower()
-			hmac_calculator = hmac.new(self.hmac_key, digestmod=hashlib.sha1)
-			hmac_calculator.update(resp_data)
-			if hmac_digest != hmac_calculator.hexdigest():
-				raise AdvancedHTTPServerRPCError('hmac validation error', resp.status)
 		resp_data = self.decode(resp_data)
 		if not ('exception_occurred' in resp_data and 'result' in resp_data):
 			raise AdvancedHTTPServerRPCError('missing response information', resp.status)
@@ -650,18 +631,11 @@ class AdvancedHTTPServerNonThreaded(http.server.HTTPServer, object):
 	is not intended for use by other classes or functions.
 	"""
 	def __init__(self, *args, **kwargs):
+		self.config = kwargs.pop('config')
 		if not hasattr(self, 'logger'):
 			self.logger = logging.getLogger('AdvancedHTTPServer')
 		self.allow_reuse_address = True
 		self.using_ssl = False
-		self.serve_files = False
-		self.serve_files_root = os.getcwd()
-		self.serve_files_list_directories = True # irrelevant if serve_files == False
-		self.serve_robots_txt = True
-		self.rpc_hmac_key = None
-		self.basic_auth = None
-		self.robots_txt = b'User-agent: *\nDisallow: /\n'
-		self.server_version = 'HTTPServer/' + __version__
 		super(AdvancedHTTPServerNonThreaded, self).__init__(*args, **kwargs)
 
 	def finish_request(self, *args, **kwargs):
@@ -743,7 +717,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		super(AdvancedHTTPServerRequestHandler, self).__init__(*args, **kwargs)
 
 	def version_string(self):
-		return self.server.server_version
+		return self.server.config['server_version']
 
 	def install_handlers(self):
 		"""
@@ -794,7 +768,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		except os.error:
 			self.respond_not_found()
 			return None
-		if os.path.normpath(dir_path) != self.server.serve_files_root:
+		if os.path.normpath(dir_path) != self.server.config['serve_files_root']:
 			dir_contents.append('..')
 		dir_contents.sort(key=lambda a: a.lower())
 		displaypath = html.escape(urllib.parse.unquote(self.path), quote=True)
@@ -891,7 +865,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		"""
 		self.send_response(401)
 		if request_authentication:
-			self.send_header('WWW-Authenticate', 'Basic realm="' + self.server_version + '"')
+			self.send_header('WWW-Authenticate', 'Basic realm="' + self.server.config['server_version'] + '"')
 		self.send_header('Content-Type', 'text/html')
 		self.end_headers()
 		self.wfile.write(b'Unauthorized\n')
@@ -925,11 +899,11 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			tmp_path = os.path.join(tmp_path, word)
 		self.path = tmp_path
 
-		if self.path == 'robots.txt' and self.server.serve_robots_txt:
+		if self.path == 'robots.txt' and self.server.config['serve_robots_txt']:
 			self.send_response(200)
 			self.send_header('Content-Type', 'text/plain')
 			self.end_headers()
-			self.wfile.write(self.server.robots_txt)
+			self.wfile.write(self.server.config['robots_txt'])
 			return
 
 		self.cookies = http.cookies.SimpleCookie(self.headers.get('cookie', ''))
@@ -947,11 +921,11 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 					self.respond_server_error()
 				return
 
-		if not self.server.serve_files:
+		if not self.server.config['serve_files']:
 			self.respond_not_found()
 			return
 
-		file_path = self.server.serve_files_root
+		file_path = self.server.config['serve_files_root']
 		file_path = os.path.join(file_path, tmp_path)
 		if os.path.isfile(file_path) and os.access(file_path, os.R_OK):
 			self.respond_file(file_path, query=query)
@@ -969,7 +943,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 				if os.path.isfile(index) and os.access(index, os.R_OK):
 					self.respond_file(index, query=query)
 					return
-			if self.server.serve_files_list_directories:
+			if self.server.config['serve_files_list_directories']:
 				self.respond_list_directory(file_path, query=query)
 				return
 		self.respond_not_found()
@@ -1025,7 +999,8 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		:rtype: bool
 		"""
 		try:
-			if self.server.basic_auth is None:
+			store = self.server.config.get('basic_auth')
+			if store is None:
 				return True
 			auth_info = self.headers.get('Authorization')
 			if not auth_info:
@@ -1042,10 +1017,10 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 					self.basic_auth_user = username
 					return True
 				return False
-			if not username in self.server.basic_auth:
+			if not username in store:
 				self.server.logger.warning('received invalid username: ' + username)
 				return False
-			password_data = self.server.basic_auth[username]
+			password_data = store[username]
 
 			if password_data['type'] == 'plain':
 				if password == password_data['value']:
@@ -1152,19 +1127,6 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			self.send_error(400, 'Invalid Data')
 			return
 
-		if self.server.rpc_hmac_key is not None:
-			hmac_digest = self.headers.get('X-RPC-HMAC')
-			if not isinstance(hmac_digest, str):
-				self.respond_unauthorized(request_authentication=True)
-				return
-			hmac_digest = hmac_digest.lower()
-			hmac_calculator = hmac.new(self.server.rpc_hmac_key, digestmod=hashlib.sha1)
-			hmac_calculator.update(data)
-			if hmac_digest != hmac_calculator.hexdigest():
-				self.server.logger.warning('failed to validate HMAC digest')
-				self.respond_unauthorized(request_authentication=True)
-				return
-
 		try:
 			serializer = AdvancedHTTPServerSerializer.from_content_type(content_type)
 		except ValueError:
@@ -1198,7 +1160,6 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			self.respond_server_error(501)
 			return
 
-		self.server.logger.info('running RPC method: ' + self.path)
 		response = {'result': None, 'exception_occurred': False}
 		try:
 			response['result'] = rpc_handler(*meth_args, **meth_kwargs)
@@ -1216,10 +1177,6 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 
 		self.send_response(200)
 		self.send_header('Content-Type', serializer.content_type)
-		if self.server.rpc_hmac_key is not None:
-			hmac_calculator = hmac.new(self.server.rpc_hmac_key, digestmod=hashlib.sha1)
-			hmac_calculator.update(response)
-			self.send_header('X-RPC-HMAC', hmac_calculator.hexdigest())
 		self.end_headers()
 
 		self.wfile.write(response)
@@ -1373,10 +1330,20 @@ class AdvancedHTTPServer(object):
 			self.logger = logging.getLogger('AdvancedHTTPServer')
 		self.server_started = False
 
+		self.config = {
+			'basic_auth': None,
+			'robots_txt': b'User-agent: *\nDisallow: /\n',
+			'serve_files': False,
+			'serve_files_list_directories': True, # irrelevant if serve_files == False
+			'serve_files_root': os.getcwd(),
+			'serve_robots_txt': True,
+			'server_version': 'HTTPServer/' + __version__
+		}
+
 		if use_threads:
-			self.http_server = AdvancedHTTPServerThreaded(address, RequestHandler)
+			self.http_server = AdvancedHTTPServerThreaded(address, RequestHandler, config=self.config)
 		else:
-			self.http_server = AdvancedHTTPServerNonThreaded(address, RequestHandler)
+			self.http_server = AdvancedHTTPServerNonThreaded(address, RequestHandler, config=self.config)
 		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
 
 		if self.use_ssl:
@@ -1421,18 +1388,18 @@ class AdvancedHTTPServer(object):
 
 		:type: bool
 		"""
-		return self.http_server.serve_files
+		return self.config['serve_files']
 
 	@serve_files.setter
 	def serve_files(self, value):
 		value = bool(value)
-		if self.http_server.serve_files == value:
+		if self.config['serve_files'] == value:
 			return
-		self.http_server.serve_files = value
+		self.config['serve_files'] = value
 		if value:
-			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - serving files has been enabled')
+			self.logger.info('serving files has been enabled')
 		else:
-			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - serving files has been disabled')
+			self.logger.info('serving files has been disabled')
 
 	@property
 	def serve_files_root(self):
@@ -1441,11 +1408,11 @@ class AdvancedHTTPServer(object):
 
 		:type: str
 		"""
-		return self.http_server.serve_files_root
+		return self.config['serve_files_root']
 
 	@serve_files_root.setter
 	def serve_files_root(self, value):
-		self.http_server.serve_files_root = os.path.abspath(value)
+		self.config['serve_files_root'] = os.path.abspath(value)
 
 	@property
 	def serve_files_list_directories(self):
@@ -1455,11 +1422,11 @@ class AdvancedHTTPServer(object):
 
 		:type: bool
 		"""
-		return self.http_server.serve_files_list_directories
+		return self.config['serve_files_list_directories']
 
 	@serve_files_list_directories.setter
 	def serve_files_list_directories(self, value):
-		self.http_server.serve_files_list_directories = bool(value)
+		self.config['serve_files_list_directories'] = bool(value)
 
 	@property
 	def serve_robots_txt(self):
@@ -1468,27 +1435,11 @@ class AdvancedHTTPServer(object):
 
 		:type: bool
 		"""
-		return self.http_server.serve_robots_txt
+		return self.config['serve_robots_txt']
 
 	@serve_robots_txt.setter
 	def serve_robots_txt(self, value):
-		self.http_server.serve_robots_txt = bool(value)
-
-	@property
-	def rpc_hmac_key(self):
-		"""
-		An HMAC key to be used for authenticating RPC requests.
-
-		:type: str
-		"""
-		return self.http_server.rpc_hmac_key
-
-	@rpc_hmac_key.setter
-	def rpc_hmac_key(self, value):
-		if not value:
-			self.http_server.rpc_hmac_key = None
-			return
-		self.http_server.rpc_hmac_key = value.encode('UTF-8')
+		self.config['serve_robots_txt'] = bool(value)
 
 	@property
 	def server_version(self):
@@ -1497,11 +1448,11 @@ class AdvancedHTTPServer(object):
 
 		:type: str
 		"""
-		return self.http_server.server_version
+		return self.config['server_version']
 
 	@server_version.setter
 	def server_version(self, value):
-		self.http_server.server_version = str(value)
+		self.config['server_version'] = str(value)
 
 	def auth_set(self, status):
 		"""
@@ -1510,10 +1461,10 @@ class AdvancedHTTPServer(object):
 		:param bool status: Whether to enable or disable requiring authentication.
 		"""
 		if not bool(status):
-			self.http_server.basic_auth = None
+			self.config['basic_auth'] = None
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been disabled')
 		else:
-			self.http_server.basic_auth = {}
+			self.config['basic_auth'] = {}
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
 
 	def auth_delete_creds(self, username=None):
@@ -1524,10 +1475,10 @@ class AdvancedHTTPServer(object):
 		:param str username: The username of the credentials to delete.
 		"""
 		if not username:
-			self.http_server.basic_auth = {}
+			self.config['basic_auth'] = {}
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication database has been cleared of all entries')
 			return
-		del self.http_server.basic_auth[username]
+		del self.config['basic_auth'][username]
 
 	def auth_add_creds(self, username, password, pwtype='plain'):
 		"""
@@ -1546,8 +1497,8 @@ class AdvancedHTTPServer(object):
 		pwtype = pwtype.lower()
 		if not pwtype in ('plain', 'md5', 'sha1', 'sha256', 'sha384', 'sha512'):
 			raise ValueError('invalid password type, must be \'plain\', or supported by hashlib')
-		if self.http_server.basic_auth is None:
-			self.http_server.basic_auth = {}
+		if self.config.get('basic_auth') is None:
+			self.config['basic_auth'] = {}
 			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
 		if pwtype != 'plain':
 			algorithms_available = getattr(hashlib, 'algorithms_available', ()) or getattr(hashlib, 'algorithms', ())
@@ -1562,7 +1513,7 @@ class AdvancedHTTPServer(object):
 				password = password.encode('UTF-8')
 			if len(hashlib.new(pwtype, b'foobar').digest()) != len(password):
 				raise ValueError('the length of the password hash does not match the type specified')
-		self.http_server.basic_auth[username] = {'value': password, 'type': pwtype}
+		self.config['basic_auth'][username] = {'value': password, 'type': pwtype}
 
 class AdvancedHTTPServerTestCase(unittest.TestCase):
 	"""

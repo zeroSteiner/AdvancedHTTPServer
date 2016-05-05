@@ -101,12 +101,12 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_throw_exception), self.handler_class.__name__, is_rpc=True)(self._rpc_test_throw_exception)
 		super(AdvancedHTTPServerTests, self).setUp()
 
-	def build_rpc_client(self, username=None, password=None, hmac_key=None, cached=False):
+	def build_rpc_client(self, username=None, password=None, cached=False):
 		if cached:
 			klass = AdvancedHTTPServerRPCClientCached
 		else:
 			klass = AdvancedHTTPServerRPCClient
-		return klass(self.server_address, username=username, password=password, hmac_key=hmac_key)
+		return klass(self.server_address, username=username, password=password)
 
 	def test_authentication_hash(self):
 		username = random_string(8)
@@ -186,16 +186,6 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 	def test_rpc_compression(self):
 		rpc = self.build_rpc_client()
 		rpc.set_serializer('application/json', compression='zlib')
-		self.run_rpc_tests(rpc)
-
-	def test_rpc_hmac(self):
-		hmac = random_string(16)
-		self.server.rpc_hmac_key = hmac
-		rpc = self.build_rpc_client()
-		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
-		rpc = self.build_rpc_client(hmac_key=random_string(16))
-		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
-		rpc = self.build_rpc_client(hmac_key=hmac)
 		self.run_rpc_tests(rpc)
 
 	def test_serializer_build(self):
