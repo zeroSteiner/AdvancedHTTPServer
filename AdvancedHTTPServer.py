@@ -68,17 +68,17 @@ WantedBy=multi-user.target
 """
 
 __version__ = '2.0.0b0'
-__all__ = [
+__all__ = (
 	'AdvancedHTTPServer',
-	'AdvancedHTTPServerRegisterPath',
-	'AdvancedHTTPServerRequestHandler',
-	'AdvancedHTTPServerRPCClient',
-	'AdvancedHTTPServerRPCClientCached',
-	'AdvancedHTTPServerRPCError',
-	'AdvancedHTTPServerTestCase',
+	'RegisterPath',
+	'RequestHandler',
+	'RPCClient',
+	'RPCClientCached',
+	'RPCError',
+	'ServerTestCase',
 	'build_server_from_argparser',
 	'build_server_from_config'
-]
+)
 
 import base64
 import binascii
@@ -226,7 +226,7 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 	:param ServerClass: Alternative server class to use.
 	:type ServerClass: :py:class:`.AdvancedHTTPServer`
 	:param HandlerClass: Alternative handler class to use.
-	:type HandlerClass: :py:class:`.AdvancedHTTPServerRequestHandler`
+	:type HandlerClass: :py:class:`.RequestHandler`
 	:return: A configured server instance.
 	:rtype: :py:class:`.AdvancedHTTPServer`
 	"""
@@ -247,7 +247,7 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 
 	description = (description or 'HTTP Server')
 	ServerClass = (ServerClass or AdvancedHTTPServer)
-	HandlerClass = (HandlerClass or AdvancedHTTPServerRequestHandler)
+	HandlerClass = (HandlerClass or RequestHandler)
 
 	parser = argparse.ArgumentParser(conflict_handler='resolve', description=description, fromfile_prefix_chars='@')
 	parser.epilog = 'When a config file is specified with --config only the --log, --log-file and --password options will be used.'
@@ -314,12 +314,12 @@ def build_server_from_config(config, section_name, ServerClass=None, HandlerClas
 	:param ServerClass: Alternative server class to use.
 	:type ServerClass: :py:class:`.AdvancedHTTPServer`
 	:param HandlerClass: Alternative handler class to use.
-	:type HandlerClass: :py:class:`.AdvancedHTTPServerRequestHandler`
+	:type HandlerClass: :py:class:`.RequestHandler`
 	:return: A configured server instance.
 	:rtype: :py:class:`.AdvancedHTTPServer`
 	"""
 	ServerClass = (ServerClass or AdvancedHTTPServer)
-	HandlerClass = (HandlerClass or AdvancedHTTPServerRequestHandler)
+	HandlerClass = (HandlerClass or RequestHandler)
 	port = config.getint(section_name, 'port')
 	web_root = None
 	if config.has_option(section_name, 'web_root'):
@@ -369,23 +369,23 @@ def build_server_from_config(config, section_name, ServerClass=None, HandlerClas
 			server.serve_files_list_directories = config.getboolean(section_name, 'list_directories')
 	return server
 
-class AdvancedHTTPServerRegisterPath(object):
+class RegisterPath(object):
 	"""
 	Register a path and handler with the global handler map. This can be
 	used as a decorator. If no handler is specified then the path and
-	function will be registered with all :py:class:`.AdvancedHTTPServerRequestHandler`
+	function will be registered with all :py:class:`.RequestHandler`
 	instances.
 
 	.. code-block:: python
 
-	  @AdvancedHTTPServerRegisterPath('^test$')
+	  @RegisterPath('^test$')
 	  def handle_test(handler, query):
 	      pass
 	"""
 	def __init__(self, path, handler=None, is_rpc=False):
 		"""
 		:param str path: The path regex to register the function to.
-		:param str handler: A specific :py:class:`.AdvancedHTTPServerRequestHandler` class to register the handler with.
+		:param str handler: A specific :py:class:`.RequestHandler` class to register the handler with.
 		:param bool is_rpc: Whether the handler is an RPC handler or not.
 		"""
 		self.path = path
@@ -405,13 +405,13 @@ class AdvancedHTTPServerRegisterPath(object):
 		GLOBAL_HANDLER_MAP[self.handler] = handler_map
 		return function
 
-class AdvancedHTTPServerRPCError(Exception):
+class RPCError(Exception):
 	"""
 	This class represents an RPC error either local or remote. Any errors
 	in routines executed on the server will raise this error.
 	"""
 	def __init__(self, message, status, remote_exception=None):
-		super(AdvancedHTTPServerRPCError, self).__init__()
+		super(RPCError, self).__init__()
 		self.message = message
 		self.status = status
 		self.remote_exception = remote_exception
@@ -434,10 +434,10 @@ class AdvancedHTTPServerRPCError(Exception):
 		"""
 		return bool(self.remote_exception is not None)
 
-class AdvancedHTTPServerRPCClient(object):
+class RPCClient(object):
 	"""
 	This object facilitates communication with remote RPC methods as
-	provided by a :py:class:`.AdvancedHTTPServerRequestHandler` instance.
+	provided by a :py:class:`.RequestHandler` instance.
 	Once created this object can be called directly, doing so is the same
 	as using the call method.
 
@@ -466,7 +466,7 @@ class AdvancedHTTPServerRPCClient(object):
 		self.lock = threading.Lock()
 		"""A :py:class:`threading.Lock` instance used to synchronize operations."""
 		self.serializer = None
-		"""The :py:class:`.AdvancedHTTPServerSerializer` instance to use for encoding RPC data to the server."""
+		"""The :py:class:`.Serializer` instance to use for encoding RPC data to the server."""
 		self.set_serializer('application/json')
 		self.reconnect()
 
@@ -483,7 +483,7 @@ class AdvancedHTTPServerRPCClient(object):
 		:param str serializer_name: The name of the serializer to use.
 		:param str compression: The name of a compression library to use.
 		"""
-		self.serializer = AdvancedHTTPServerSerializer(serializer_name, charset='UTF-8', compression=compression)
+		self.serializer = Serializer(serializer_name, charset='UTF-8', compression=compression)
 		self.logger.debug('using serializer: ' + serializer_name)
 
 	def __call__(self, *args, **kwargs):
@@ -535,26 +535,26 @@ class AdvancedHTTPServerRPCClient(object):
 				self.client.request('RPC', method, options, headers)
 				resp = self.client.getresponse()
 		except http.client.ImproperConnectionState:
-			raise AdvancedHTTPServerRPCError('improper connection state', None)
+			raise RPCError('improper connection state', None)
 		if resp.status != 200:
-			raise AdvancedHTTPServerRPCError(resp.reason, resp.status)
+			raise RPCError(resp.reason, resp.status)
 
 		resp_data = resp.read()
 		resp_data = self.decode(resp_data)
 		if not ('exception_occurred' in resp_data and 'result' in resp_data):
-			raise AdvancedHTTPServerRPCError('missing response information', resp.status)
+			raise RPCError('missing response information', resp.status)
 		if resp_data['exception_occurred']:
-			raise AdvancedHTTPServerRPCError('remote method incurred an exception', resp.status, remote_exception=resp_data['exception'])
+			raise RPCError('remote method incurred an exception', resp.status, remote_exception=resp_data['exception'])
 		return resp_data['result']
 
-class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
+class RPCClientCached(RPCClient):
 	"""
-	This object builds upon :py:class:`.AdvancedHTTPServerRPCClient` and
+	This object builds upon :py:class:`.RPCClient` and
 	provides additional methods for cacheing results in memory.
 	"""
 	def __init__(self, *args, **kwargs):
 		cache_db = kwargs.pop('cache_db', ':memory:')
-		super(AdvancedHTTPServerRPCClientCached, self).__init__(*args, **kwargs)
+		super(RPCClientCached, self).__init__(*args, **kwargs)
 		self.cache_db = sqlite3.connect(cache_db, check_same_thread=False)
 		cursor = self.cache_db.cursor()
 		cursor.execute('CREATE TABLE IF NOT EXISTS cache (method TEXT NOT NULL, options_hash BLOB NOT NULL, return_value BLOB NOT NULL)')
@@ -625,7 +625,7 @@ class AdvancedHTTPServerRPCClientCached(AdvancedHTTPServerRPCClient):
 		self.logger.info('the RPC cache has been purged')
 		return
 
-class AdvancedHTTPServerNonThreaded(http.server.HTTPServer, object):
+class ServerNonThreaded(http.server.HTTPServer, object):
 	"""
 	This class is used internally by :py:class:`.AdvancedHTTPServer` and
 	is not intended for use by other classes or functions.
@@ -636,34 +636,34 @@ class AdvancedHTTPServerNonThreaded(http.server.HTTPServer, object):
 			self.logger = logging.getLogger('AdvancedHTTPServer')
 		self.allow_reuse_address = True
 		self.using_ssl = False
-		super(AdvancedHTTPServerNonThreaded, self).__init__(*args, **kwargs)
+		super(ServerNonThreaded, self).__init__(*args, **kwargs)
 
 	def finish_request(self, *args, **kwargs):
 		try:
-			super(AdvancedHTTPServerNonThreaded, self).finish_request(*args, **kwargs)
+			super(ServerNonThreaded, self).finish_request(*args, **kwargs)
 		except IOError:
 			self.logger.warning('IOError encountered in finish_request')
 
 	def server_bind(self, *args, **kwargs):
 		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-		super(AdvancedHTTPServerNonThreaded, self).server_bind(*args, **kwargs)
+		super(ServerNonThreaded, self).server_bind(*args, **kwargs)
 
 	def shutdown(self, *args, **kwargs):
-		super(AdvancedHTTPServerNonThreaded, self).shutdown(*args, **kwargs)
+		super(ServerNonThreaded, self).shutdown(*args, **kwargs)
 		try:
 			self.socket.shutdown(socket.SHUT_RDWR)
 		except socket.error:
 			pass
 		self.socket.close()
 
-class AdvancedHTTPServerThreaded(socketserver.ThreadingMixIn, AdvancedHTTPServerNonThreaded):
+class ServerThreaded(socketserver.ThreadingMixIn, ServerNonThreaded):
 	"""
 	This class is used internally by :py:class:`.AdvancedHTTPServer` and
 	is not intended for use by other classes or functions.
 	"""
 	pass
 
-class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, object):
+class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 	"""
 	This is the primary http request handler class of the
 	AdvancedHTTPServer framework. Custom request handlers must inherit
@@ -714,7 +714,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		"""The parameter data that has been passed to the server parsed as a dict."""
 		self.raw_query_data = None
 		"""The raw data that was parsed into the :py:attr:`.query_data` attribute."""
-		super(AdvancedHTTPServerRequestHandler, self).__init__(*args, **kwargs)
+		super(RequestHandler, self).__init__(*args, **kwargs)
 
 	def version_string(self):
 		return self.server.config['server_version']
@@ -950,11 +950,11 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 		return
 
 	def send_response(self, *args, **kwargs):
-		super(AdvancedHTTPServerRequestHandler, self).send_response(*args, **kwargs)
+		super(RequestHandler, self).send_response(*args, **kwargs)
 		self.headers_active = True
 
 	def end_headers(self):
-		super(AdvancedHTTPServerRequestHandler, self).end_headers()
+		super(RequestHandler, self).end_headers()
 		self.headers_active = False
 		if self.command == 'HEAD':
 			self.wfile.close() # pylint: disable=access-member-before-definition
@@ -1128,7 +1128,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			return
 
 		try:
-			serializer = AdvancedHTTPServerSerializer.from_content_type(content_type)
+			serializer = Serializer.from_content_type(content_type)
 		except ValueError:
 			self.send_error(400, 'Invalid Content-Type')
 			return
@@ -1214,7 +1214,7 @@ class AdvancedHTTPServerRequestHandler(http.server.BaseHTTPRequestHandler, objec
 			encoding = (header[idx + 8:].split(' ', 1)[0] or encoding)
 		return encoding
 
-class AdvancedHTTPServerSerializer(object):
+class Serializer(object):
 	"""
 	This class represents a serilizer object for use with the RPC system.
 	"""
@@ -1240,7 +1240,7 @@ class AdvancedHTTPServerSerializer(object):
 
 		:param str content_type: The Content-Type string to parse.
 		:return: A new serializer instance.
-		:rtype: :py:class:`.AdvancedHTTPServerSerializer`
+		:rtype: :py:class:`.Serializer`
 		"""
 		name = content_type
 		options = {}
@@ -1304,7 +1304,7 @@ class AdvancedHTTPServer(object):
 	def __init__(self, RequestHandler, address=None, use_threads=True, ssl_certfile=None, ssl_keyfile=None, ssl_version=None):
 		"""
 		:param RequestHandler: The request handler class to use.
-		:type RequestHandler: :py:class:`.AdvancedHTTPServerRequestHandler`
+		:type RequestHandler: :py:class:`.RequestHandler`
 		:param tuple address: The address to bind to in the format (host, port).
 		:param bool use_threads: Whether to enable the use of a threaded handler.
 		:param str ssl_certfile: An SSL certificate file to use, setting this enables SSL.
@@ -1341,9 +1341,9 @@ class AdvancedHTTPServer(object):
 		}
 
 		if use_threads:
-			self.http_server = AdvancedHTTPServerThreaded(address, RequestHandler, config=self.config)
+			self.http_server = ServerThreaded(address, RequestHandler, config=self.config)
 		else:
-			self.http_server = AdvancedHTTPServerNonThreaded(address, RequestHandler, config=self.config)
+			self.http_server = ServerNonThreaded(address, RequestHandler, config=self.config)
 		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
 
 		if self.use_ssl:
@@ -1515,18 +1515,18 @@ class AdvancedHTTPServer(object):
 				raise ValueError('the length of the password hash does not match the type specified')
 		self.config['basic_auth'][username] = {'value': password, 'type': pwtype}
 
-class AdvancedHTTPServerTestCase(unittest.TestCase):
+class ServerTestCase(unittest.TestCase):
 	"""
 	A base class for unit tests with AdvancedHTTPServer derived classes.
 	"""
 	server_class = AdvancedHTTPServer
 	"""The :py:class:`.AdvancedHTTPServer` class to use as the server, this can be overridden by subclasses."""
-	handler_class = AdvancedHTTPServerRequestHandler
-	"""The :py:class:`.AdvancedHTTPServerRequestHandler` class to use as the request handler, this can be overridden by subclasses."""
+	handler_class = RequestHandler
+	"""The :py:class:`.RequestHandler` class to use as the request handler, this can be overridden by subclasses."""
 	config_section = 'server'
 	"""The name of the :py:class:`configparser.ConfigParser` section that the server is using."""
 	def __init__(self, *args, **kwargs):
-		super(AdvancedHTTPServerTestCase, self).__init__(*args, **kwargs)
+		super(ServerTestCase, self).__init__(*args, **kwargs)
 		config = ConfigParser()
 		config.add_section(self.config_section)
 		config.set(self.config_section, 'ip', '127.0.0.1')
@@ -1548,7 +1548,7 @@ class AdvancedHTTPServerTestCase(unittest.TestCase):
 			self.assertRaisesRegex = self.assertRaisesRegexp
 
 	def setUp(self):
-		AdvancedHTTPServerRegisterPath("^{0}$".format(self.test_resource[1:]), self.handler_class.__name__)(self._test_resource_handler)
+		RegisterPath("^{0}$".format(self.test_resource[1:]), self.handler_class.__name__)(self._test_resource_handler)
 		self.server = build_server_from_config(self.config, self.config_section, self.server_class, self.handler_class)
 		self.assertTrue(isinstance(self.server, AdvancedHTTPServer))
 		self.server_thread = threading.Thread(target=self.server.serve_forever)
@@ -1611,7 +1611,7 @@ def main():
 	try:
 		server = build_server_from_argparser()
 	except ImportError:
-		server = AdvancedHTTPServer(AdvancedHTTPServerRequestHandler)
+		server = AdvancedHTTPServer(RequestHandler)
 		server.serve_files_root = '.'
 
 	server.serve_files_root = (server.serve_files_root or '.')

@@ -37,7 +37,7 @@ import sys
 from AdvancedHTTPServer import *
 from AdvancedHTTPServer import __version__
 
-class RedirectHandler(AdvancedHTTPServerRequestHandler):
+class RedirectHandler(RequestHandler):
 	target_url = 'http://127.0.0.1'
 	def install_handlers(self):
 		self.handler_map['.*'] = self.redirect

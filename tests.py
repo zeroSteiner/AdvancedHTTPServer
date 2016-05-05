@@ -40,12 +40,12 @@ import ssl
 import time
 import unittest
 
-from AdvancedHTTPServer import AdvancedHTTPServerRegisterPath
-from AdvancedHTTPServer import AdvancedHTTPServerRPCClient
-from AdvancedHTTPServer import AdvancedHTTPServerRPCClientCached
-from AdvancedHTTPServer import AdvancedHTTPServerRPCError
-from AdvancedHTTPServer import AdvancedHTTPServerSerializer
-from AdvancedHTTPServer import AdvancedHTTPServerTestCase
+from AdvancedHTTPServer import RegisterPath
+from AdvancedHTTPServer import RPCClient
+from AdvancedHTTPServer import RPCClientCached
+from AdvancedHTTPServer import RPCError
+from AdvancedHTTPServer import Serializer
+from AdvancedHTTPServer import ServerTestCase
 from AdvancedHTTPServer import has_msgpack
 from AdvancedHTTPServer import random_string
 from AdvancedHTTPServer import resolve_ssl_protocol_version
@@ -56,7 +56,7 @@ else:
 	null_handler = logging.StreamHandler(open(os.devnull, 'w'))
 logging.getLogger('AdvancedHTTPServer').addHandler(null_handler)
 
-class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
+class ServerTests(ServerTestCase):
 	def _test_authentication(self, username, password):
 		response = self.http_request(self.test_resource, 'GET')
 		self.assertHTTPStatus(response, 401)
@@ -96,16 +96,16 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.rpc_test_double = "{0}".format(random_string(40))
 		self.rpc_test_datetime = "{0}".format(random_string(40))
 		self.rpc_test_throw_exception = "{0}".format(random_string(40))
-		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_double), self.handler_class.__name__, is_rpc=True)(self._rpc_test_double_handler)
-		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_datetime), self.handler_class.__name__, is_rpc=True)(self._rpc_test_datetime_handler)
-		AdvancedHTTPServerRegisterPath("/{0}".format(self.rpc_test_throw_exception), self.handler_class.__name__, is_rpc=True)(self._rpc_test_throw_exception)
-		super(AdvancedHTTPServerTests, self).setUp()
+		RegisterPath("/{0}".format(self.rpc_test_double), self.handler_class.__name__, is_rpc=True)(self._rpc_test_double_handler)
+		RegisterPath("/{0}".format(self.rpc_test_datetime), self.handler_class.__name__, is_rpc=True)(self._rpc_test_datetime_handler)
+		RegisterPath("/{0}".format(self.rpc_test_throw_exception), self.handler_class.__name__, is_rpc=True)(self._rpc_test_throw_exception)
+		super(ServerTests, self).setUp()
 
 	def build_rpc_client(self, username=None, password=None, cached=False):
 		if cached:
-			klass = AdvancedHTTPServerRPCClientCached
+			klass = RPCClientCached
 		else:
-			klass = AdvancedHTTPServerRPCClient
+			klass = RPCClient
 		return klass(self.server_address, username=username, password=password)
 
 	def test_authentication_hash(self):
@@ -168,9 +168,9 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		password = random_string(12)
 		self.server.auth_add_creds(username, password)
 		rpc = self.build_rpc_client()
-		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
+		self.assertRaisesRegex(RPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
 		rpc = self.build_rpc_client(username=username, password=random_string(12))
-		self.assertRaisesRegex(AdvancedHTTPServerRPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
+		self.assertRaisesRegex(RPCError, r'the server responded with 401 \'Unauthorized\'', self.run_rpc_tests, rpc)
 		rpc = self.build_rpc_client(username=username, password=password)
 		self.run_rpc_tests(rpc)
 
@@ -189,17 +189,17 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		self.run_rpc_tests(rpc)
 
 	def test_serializer_build(self):
-		serializer = AdvancedHTTPServerSerializer.from_content_type('application/json')
-		self.assertIsInstance(serializer, AdvancedHTTPServerSerializer)
+		serializer = Serializer.from_content_type('application/json')
+		self.assertIsInstance(serializer, Serializer)
 		self.assertEqual(serializer.name, 'application/json')
 
 	def test_serializer_json(self):
-		serializer = AdvancedHTTPServerSerializer('application/json')
+		serializer = Serializer('application/json')
 		self._test_serializer_hooks(serializer)
 
 	@unittest.skipUnless(has_msgpack, 'this test requires msgpack')
 	def test_serializer_msgpack(self):
-		serializer = AdvancedHTTPServerSerializer('binary/message-pack')
+		serializer = Serializer('binary/message-pack')
 		self._test_serializer_hooks(serializer)
 
 	def test_verb_fake(self):
@@ -233,7 +233,7 @@ class AdvancedHTTPServerTests(AdvancedHTTPServerTestCase):
 		number = random.randint(0, 10000)
 		doubled = rpc(self.rpc_test_double, number)
 		self.assertEqual(doubled, number * 2)
-		with self.assertRaisesRegex(AdvancedHTTPServerRPCError, '^a remote exception occurred$'):
+		with self.assertRaisesRegex(RPCError, '^a remote exception occurred$'):
 			rpc(self.rpc_test_throw_exception)
 
 if __name__ == '__main__':

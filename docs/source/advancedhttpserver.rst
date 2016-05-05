@@ -30,34 +30,34 @@ Classes
    :special-members: __init__
    :undoc-members:
 
-.. autoclass:: AdvancedHTTPServerRegisterPath
+.. autoclass:: RegisterPath
    :members:
    :special-members: __init__
    :undoc-members:
 
-.. autoclass:: AdvancedHTTPServerRequestHandler
+.. autoclass:: RequestHandler
    :members:
 
-.. autoclass:: AdvancedHTTPServerRPCClient
-   :members:
-   :special-members: __init__
-   :undoc-members:
-
-.. autoclass:: AdvancedHTTPServerRPCClientCached
-   :members:
-   :undoc-members:
-
-.. autoclass:: AdvancedHTTPServerSerializer
+.. autoclass:: RPCClient
    :members:
    :special-members: __init__
    :undoc-members:
 
-.. autoclass:: AdvancedHTTPServerTestCase
+.. autoclass:: RPCClientCached
+   :members:
+   :undoc-members:
+
+.. autoclass:: Serializer
+   :members:
+   :special-members: __init__
+   :undoc-members:
+
+.. autoclass:: ServerTestCase
    :members:
 
 Exceptions
 ----------
 
-.. autoexception:: AdvancedHTTPServerRPCError
+.. autoexception:: RPCError
    :members:
    :undoc-members:

@@ -36,7 +36,7 @@ import sys
 from AdvancedHTTPServer import *
 from AdvancedHTTPServer import __version__
 
-class DemoHandler(AdvancedHTTPServerRequestHandler):
+class DemoHandler(RequestHandler):
 	def install_handlers(self):
 		self.handler_map['^redirect_to_google$'] = lambda handler, query: self.respond_redirect('http://www.google.com/')
 		self.handler_map['^hello_world$'] = self.res_hello_world
