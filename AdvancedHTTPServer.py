@@ -128,6 +128,8 @@ else:
 	from configparser import ConfigParser
 
 GLOBAL_HANDLER_MAP = {}
+SERIALIZER_DRIVERS = {}
+"""Dictionary of available drivers for serialization."""
 
 def _serialize_ext_dump(obj):
 	if obj.__class__ == datetime.date:
@@ -154,9 +156,10 @@ def _json_default(obj):
 def _json_object_hook(obj):
 	return _serialize_ext_load(obj.get('__complex_type__'), obj.get('value'), obj)
 
-SERIALIZER_DRIVERS = {}
-"""Dictionary of available drivers for serialization."""
-SERIALIZER_DRIVERS['application/json'] = {'loads': lambda d, e: json.loads(d, object_hook=_json_object_hook), 'dumps': lambda d: json.dumps(d, default=_json_default)}
+SERIALIZER_DRIVERS['application/json'] = {
+	'dumps': lambda d: json.dumps(d, default=_json_default),
+	'loads': lambda d, e: json.loads(d, object_hook=_json_object_hook)
+}
 
 try:
 	import msgpack
@@ -178,7 +181,10 @@ else:
 			obj_value = obj_value.decode('utf-8')
 		obj_type = _MSGPACK_EXT_TYPES.get(code)
 		return _serialize_ext_load(obj_type, obj_value, default)
-	SERIALIZER_DRIVERS['binary/message-pack'] = {'loads': lambda d, e: msgpack.loads(d, encoding=e, ext_hook=_msgpack_ext_hook), 'dumps': lambda d: msgpack.dumps(d, default=_msgpack_default)}
+	SERIALIZER_DRIVERS['binary/message-pack'] = {
+		'dumps': lambda d: msgpack.dumps(d, default=_msgpack_default),
+		'loads': lambda d, e: msgpack.loads(d, encoding=e, ext_hook=_msgpack_ext_hook)
+	}
 
 if hasattr(logging, 'NullHandler'):
 	logging.getLogger('AdvancedHTTPServer').addHandler(logging.NullHandler())
@@ -193,7 +199,7 @@ def random_string(size):
 	:return: A string consisting of random characters.
 	:rtype: str
 	"""
-	return ''.join(random.choice(string.ascii_letters + string.digits) for x in range(size))
+	return ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(size))
 
 def resolve_ssl_protocol_version(version=None):
 	"""
@@ -216,17 +222,17 @@ def resolve_ssl_protocol_version(version=None):
 		return getattr(ssl, 'PROTOCOL_' + version)
 	raise TypeError("ssl_version() argument 1 must be str, not {0}".format(type(version).__name__))
 
-def build_server_from_argparser(description=None, ServerClass=None, HandlerClass=None):
+def build_server_from_argparser(description=None, server_klass=None, handler_klass=None):
 	"""
 	Build a server from command line arguments. If a ServerClass or
 	HandlerClass is specified, then the object must inherit from the
 	corresponding AdvancedHTTPServer base class.
 
 	:param str description: Description string to be passed to the argument parser.
-	:param ServerClass: Alternative server class to use.
-	:type ServerClass: :py:class:`.AdvancedHTTPServer`
-	:param HandlerClass: Alternative handler class to use.
-	:type HandlerClass: :py:class:`.RequestHandler`
+	:param server_klass: Alternative server class to use.
+	:type server_klass: :py:class:`.AdvancedHTTPServer`
+	:param handler_klass: Alternative handler class to use.
+	:type handler_klass: :py:class:`.RequestHandler`
 	:return: A configured server instance.
 	:rtype: :py:class:`.AdvancedHTTPServer`
 	"""
@@ -246,8 +252,8 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 		return arg
 
 	description = (description or 'HTTP Server')
-	ServerClass = (ServerClass or AdvancedHTTPServer)
-	HandlerClass = (HandlerClass or RequestHandler)
+	server_klass = (server_klass or AdvancedHTTPServer)
+	handler_klass = (handler_klass or RequestHandler)
 
 	parser = argparse.ArgumentParser(conflict_handler='resolve', description=description, fromfile_prefix_chars='@')
 	parser.epilog = 'When a config file is specified with --config only the --log, --log-file and --password options will be used.'
@@ -284,12 +290,12 @@ def build_server_from_argparser(description=None, ServerClass=None, HandlerClass
 		server = build_server_from_config(
 			config,
 			'server',
-			ServerClass=ServerClass,
-			HandlerClass=HandlerClass
+			ServerClass=server_klass,
+			HandlerClass=handler_klass
 		)
 	else:
-		server = ServerClass(
-			HandlerClass,
+		server = server_klass(
+			handler_klass,
 			address=(arguments.ip, arguments.port),
 			ssl_certfile=arguments.ssl_cert,
 			ssl_keyfile=arguments.ssl_key,
@@ -1193,6 +1199,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		Get a value from the query data that was sent to the server.
 
 		:param str name: The name of the query value to retrieve.
+		:param default: The value to return if *name* is not specified.
 		:return: The value if it exists, otherwise *default* will be returned.
 		:rtype: str
 		"""
@@ -1301,10 +1308,10 @@ class AdvancedHTTPServer(object):
 	the port is guessed based on if the server is run as root or not and
 	SSL is used.
 	"""
-	def __init__(self, RequestHandler, address=None, use_threads=True, ssl_certfile=None, ssl_keyfile=None, ssl_version=None):
+	def __init__(self, handler_klass, address=None, use_threads=True, ssl_certfile=None, ssl_keyfile=None, ssl_version=None):
 		"""
-		:param RequestHandler: The request handler class to use.
-		:type RequestHandler: :py:class:`.RequestHandler`
+		:param handler_klass: The request handler class to use.
+		:type handler_klass: :py:class:`.RequestHandler`
 		:param tuple address: The address to bind to in the format (host, port).
 		:param bool use_threads: Whether to enable the use of a threaded handler.
 		:param str ssl_certfile: An SSL certificate file to use, setting this enables SSL.
@@ -1323,7 +1330,6 @@ class AdvancedHTTPServer(object):
 					address = ('0.0.0.0', 8080)
 				else:
 					address = ('0.0.0.0', 80)
-		self.address = address
 		self.ssl_certfile = ssl_certfile
 		self.ssl_keyfile = ssl_keyfile
 		if not hasattr(self, 'logger'):
@@ -1341,9 +1347,9 @@ class AdvancedHTTPServer(object):
 		}
 
 		if use_threads:
-			self.http_server = ServerThreaded(address, RequestHandler, config=self.config)
+			self.http_server = ServerThreaded(address, handler_klass, config=self.config)
 		else:
-			self.http_server = ServerNonThreaded(address, RequestHandler, config=self.config)
+			self.http_server = ServerNonThreaded(address, handler_klass, config=self.config)
 		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
 
 		if self.use_ssl:
@@ -1353,7 +1359,7 @@ class AdvancedHTTPServer(object):
 			self.http_server.using_ssl = True
 			self.logger.info(address[0] + ':' + str(address[1]) + ' - ssl has been enabled')
 
-		if hasattr(RequestHandler, 'custom_authentication'):
+		if hasattr(handler_klass, 'custom_authentication'):
 			self.logger.debug(address[0] + ':' + str(address[1]) + ' - a custom authentication function is being used')
 			self.auth_set(True)
 
@@ -1370,7 +1376,7 @@ class AdvancedHTTPServer(object):
 				raise OSError('os.fork is not available')
 			child_pid = os.fork()
 			if child_pid != 0:
-				self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - forked child process: ' + str(child_pid))
+				self.logger.info('forked child process: ' + str(child_pid))
 				return child_pid
 		self.server_started = True
 		self.http_server.serve_forever()
@@ -1456,16 +1462,16 @@ class AdvancedHTTPServer(object):
 
 	def auth_set(self, status):
 		"""
-		Enable or disable requring authentication on all incoming requests.
+		Enable or disable requiring authentication on all incoming requests.
 
 		:param bool status: Whether to enable or disable requiring authentication.
 		"""
 		if not bool(status):
 			self.config['basic_auth'] = None
-			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been disabled')
+			self.logger.info('basic authentication has been disabled')
 		else:
 			self.config['basic_auth'] = {}
-			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
+			self.logger.info('basic authentication has been enabled')
 
 	def auth_delete_creds(self, username=None):
 		"""
@@ -1476,7 +1482,7 @@ class AdvancedHTTPServer(object):
 		"""
 		if not username:
 			self.config['basic_auth'] = {}
-			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication database has been cleared of all entries')
+			self.logger.info('basic authentication database has been cleared of all entries')
 			return
 		del self.config['basic_auth'][username]
 
@@ -1499,7 +1505,7 @@ class AdvancedHTTPServer(object):
 			raise ValueError('invalid password type, must be \'plain\', or supported by hashlib')
 		if self.config.get('basic_auth') is None:
 			self.config['basic_auth'] = {}
-			self.logger.info(self.address[0] + ':' + str(self.address[1]) + ' - basic authentication has been enabled')
+			self.logger.info('basic authentication has been enabled')
 		if pwtype != 'plain':
 			algorithms_available = getattr(hashlib, 'algorithms_available', ()) or getattr(hashlib, 'algorithms', ())
 			if not pwtype in algorithms_available:
