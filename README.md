@@ -31,6 +31,7 @@ The following version of Python are currently supported:
  - Python 2.7
  - Python 3.3
  - Python 3.4
+ - Python 3.5
 
 ## Code Documentation
 AdvancedHTTPServer uses Sphinx for internal code documentation. This
@@ -38,6 +39,13 @@ documentation can be generated from source with the command
 ```sphinx-build docs/source docs/html```. The latest documentation is
 kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
 [advancedhttpserver.readthedocs.org](https://advancedhttpserver.readthedocs.org/en/latest/).
+
+## Changes In Version 2.0
+ - The `AdvancedHTTPServer` module has been renamed `advancedhttpserver`
+ - Classes prefixed with `AdvancedHTTPServer` have been renamed to have the
+   redundant prefix removed
+ - The `hmac_key` option is not longer supported
+ - A single `AdvancedHTTPServer` instance can now be bound to multiple ports
 
 ## Powered By AdvancedHTTPServer
  - [King Phisher](https://github.com/securestate/king-phisher) Phishing Campaign Toolkit
