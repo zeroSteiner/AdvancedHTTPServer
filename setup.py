@@ -35,7 +35,7 @@
 
 from distutils.core import setup
 
-from AdvancedHTTPServer import __version__
+from advancedhttpserver import __version__
 
 setup(
 	name='AdvancedHTTPServer',

@@ -34,8 +34,8 @@ import argparse
 import logging
 import sys
 
-from AdvancedHTTPServer import *
-from AdvancedHTTPServer import __version__
+from advancedhttpserver import *
+from advancedhttpserver import __version__
 
 class RedirectHandler(RequestHandler):
 	target_url = 'http://127.0.0.1'

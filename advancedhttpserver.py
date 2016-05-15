@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-#  AdvancedHTTPServer.py
+#  advancedhttpserver.py
 #
 #  Redistribution and use in source and binary forms, with or without
 #  modification, are permitted provided that the following conditions are
@@ -60,7 +60,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/sbin/runuser -l nobody -c "/usr/bin/python -m AdvancedHTTPServer -c /etc/pyhttpd.conf"
+ExecStart=/sbin/runuser -l nobody -c "/usr/bin/python -m advhttpsrv -c /etc/pyhttpd.conf"
 ExecStop=/bin/kill -INT $MAINPID
 
 [Install]
@@ -1309,7 +1309,7 @@ class Serializer(object):
 
 class AdvancedHTTPServer(object):
 	"""
-	This is the primary server class for the AdvancedHTTPServer framework.
+	This is the primary server class for the AdvancedHTTPServer module.
 	Custom servers must inherit from this object to be compatible. When
 	no *address* parameter is specified the address '0.0.0.0' is used and
 	the port is guessed based on if the server is run as root or not and

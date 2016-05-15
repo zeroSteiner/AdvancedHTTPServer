@@ -40,15 +40,15 @@ import ssl
 import time
 import unittest
 
-from AdvancedHTTPServer import RegisterPath
-from AdvancedHTTPServer import RPCClient
-from AdvancedHTTPServer import RPCClientCached
-from AdvancedHTTPServer import RPCError
-from AdvancedHTTPServer import Serializer
-from AdvancedHTTPServer import ServerTestCase
-from AdvancedHTTPServer import has_msgpack
-from AdvancedHTTPServer import random_string
-from AdvancedHTTPServer import resolve_ssl_protocol_version
+from advancedhttpserver import RegisterPath
+from advancedhttpserver import RPCClient
+from advancedhttpserver import RPCClientCached
+from advancedhttpserver import RPCError
+from advancedhttpserver import Serializer
+from advancedhttpserver import ServerTestCase
+from advancedhttpserver import has_msgpack
+from advancedhttpserver import random_string
+from advancedhttpserver import resolve_ssl_protocol_version
 
 if hasattr(logging, 'NullHandler'):
 	null_handler = logging.NullHandler()
