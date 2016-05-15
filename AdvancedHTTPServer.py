@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.0b0'
+__version__ = '2.0.0b1'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -93,6 +93,7 @@ import os
 import posixpath
 import random
 import re
+import select
 import shutil
 import socket
 import sqlite3
@@ -290,8 +291,8 @@ def build_server_from_argparser(description=None, server_klass=None, handler_kla
 		server = build_server_from_config(
 			config,
 			'server',
-			ServerClass=server_klass,
-			HandlerClass=handler_klass
+			server_klass=server_klass,
+			handler_klass=handler_klass
 		)
 	else:
 		server = server_klass(
@@ -307,7 +308,7 @@ def build_server_from_argparser(description=None, server_klass=None, handler_kla
 		server.auth_add_creds('', arguments.password)
 	return server
 
-def build_server_from_config(config, section_name, ServerClass=None, HandlerClass=None):
+def build_server_from_config(config, section_name, server_klass=None, handler_klass=None):
 	"""
 	Build a server from a provided :py:class:`configparser.ConfigParser`
 	instance. If a ServerClass or HandlerClass is specified, then the
@@ -317,15 +318,15 @@ def build_server_from_config(config, section_name, ServerClass=None, HandlerClas
 	:param config: Configuration to retrieve settings from.
 	:type config: :py:class:`configparser.ConfigParser`
 	:param str section_name: The section name of the configuration to use.
-	:param ServerClass: Alternative server class to use.
-	:type ServerClass: :py:class:`.AdvancedHTTPServer`
-	:param HandlerClass: Alternative handler class to use.
-	:type HandlerClass: :py:class:`.RequestHandler`
+	:param server_klass: Alternative server class to use.
+	:type server_klass: :py:class:`.AdvancedHTTPServer`
+	:param handler_klass: Alternative handler class to use.
+	:type handler_klass: :py:class:`.RequestHandler`
 	:return: A configured server instance.
 	:rtype: :py:class:`.AdvancedHTTPServer`
 	"""
-	ServerClass = (ServerClass or AdvancedHTTPServer)
-	HandlerClass = (HandlerClass or RequestHandler)
+	server_klass = (server_klass or AdvancedHTTPServer)
+	handler_klass = (handler_klass or RequestHandler)
 	port = config.getint(section_name, 'port')
 	web_root = None
 	if config.has_option(section_name, 'web_root'):
@@ -344,7 +345,13 @@ def build_server_from_config(config, section_name, ServerClass=None, HandlerClas
 	ssl_version = None
 	if config.has_option(section_name, 'ssl_version'):
 		ssl_version = config.get(section_name, 'ssl_version')
-	server = ServerClass(HandlerClass, address=(ip, port), ssl_certfile=ssl_certfile, ssl_keyfile=ssl_keyfile, ssl_version=ssl_version)
+	server = server_klass(
+		handler_klass,
+		address=(ip, port),
+		ssl_certfile=ssl_certfile,
+		ssl_keyfile=ssl_keyfile,
+		ssl_version=ssl_version
+	)
 
 	if config.has_option(section_name, 'password_type'):
 		password_type = config.get(section_name, 'password_type')
@@ -1308,33 +1315,39 @@ class AdvancedHTTPServer(object):
 	the port is guessed based on if the server is run as root or not and
 	SSL is used.
 	"""
-	def __init__(self, handler_klass, address=None, use_threads=True, ssl_certfile=None, ssl_keyfile=None, ssl_version=None):
+	def __init__(self, handler_klass, address=None, addresses=None, use_threads=True, ssl_certfile=None, ssl_keyfile=None, ssl_version=None):
 		"""
 		:param handler_klass: The request handler class to use.
 		:type handler_klass: :py:class:`.RequestHandler`
 		:param tuple address: The address to bind to in the format (host, port).
+		:param tuple addresses: The addresses to bind to in the format (host, port, ssl).
 		:param bool use_threads: Whether to enable the use of a threaded handler.
 		:param str ssl_certfile: An SSL certificate file to use, setting this enables SSL.
 		:param str ssl_keyfile: An SSL certificate file to use.
 		:param ssl_version: The SSL protocol version to use.
 		"""
-		self.use_ssl = bool(ssl_certfile)
-		if address is None:
-			if self.use_ssl:
+		if addresses is None:
+			addresses = []
+		if address is None and len(addresses) == 0:
+			if ssl_certfile is not None:
 				if os.getuid():
-					address = ('0.0.0.0', 8443)
+					addresses.insert(0, ('0.0.0.0', 8443, True))
 				else:
-					address = ('0.0.0.0', 443)
+					addresses.insert(0, ('0.0.0.0', 443, True))
 			else:
 				if os.getuid():
-					address = ('0.0.0.0', 8080)
+					addresses.insert(0, ('0.0.0.0', 8080, False))
 				else:
-					address = ('0.0.0.0', 80)
+					addresses.insert(0, ('0.0.0.0', 80, False))
+		elif address:
+			addresses.insert(0, (address[0], address[1], ssl_certfile is not None))
 		self.ssl_certfile = ssl_certfile
 		self.ssl_keyfile = ssl_keyfile
 		if not hasattr(self, 'logger'):
 			self.logger = logging.getLogger('AdvancedHTTPServer')
 		self.server_started = False
+		self.__should_stop = threading.Event()
+		self.__is_shutdown = threading.Event()
 
 		self.config = {
 			'basic_auth': None,
@@ -1346,21 +1359,31 @@ class AdvancedHTTPServer(object):
 			'server_version': 'HTTPServer/' + __version__
 		}
 
-		if use_threads:
-			self.http_server = ServerThreaded(address, handler_klass, config=self.config)
-		else:
-			self.http_server = ServerNonThreaded(address, handler_klass, config=self.config)
-		self.logger.info('listening on ' + address[0] + ':' + str(address[1]))
+		if ssl_version is None or isinstance(ssl_version, str):
+			ssl_version = resolve_ssl_protocol_version(ssl_version)
 
-		if self.use_ssl:
-			if ssl_version is None or isinstance(ssl_version, str):
-				ssl_version = resolve_ssl_protocol_version(ssl_version)
-			self.http_server.socket = ssl.wrap_socket(self.http_server.socket, keyfile=ssl_keyfile, certfile=ssl_certfile, server_side=True, ssl_version=ssl_version)
-			self.http_server.using_ssl = True
-			self.logger.info(address[0] + ':' + str(address[1]) + ' - ssl has been enabled')
+		self._servers = []
+		if use_threads:
+			server_klass = ServerThreaded
+		else:
+			server_klass = ServerNonThreaded
+		for address in addresses:
+			use_ssl = (len(address) == 3 and address[2])
+			server = server_klass((address[0], address[1]), handler_klass, config=self.config)
+			if use_ssl:
+				ssl.wrap_socket(
+					server.socket,
+					keyfile=ssl_keyfile,
+					certfile=ssl_certfile,
+					server_side=True,
+					ssl_version=ssl_version
+				)
+				server.using_ssl = True
+			self._servers.append(server)
+			self.logger.info("listening on {0}:{1} (with{2} ssl)".format(address[0], address[1], ('' if use_ssl else 'out')))
 
 		if hasattr(handler_klass, 'custom_authentication'):
-			self.logger.debug(address[0] + ':' + str(address[1]) + ' - a custom authentication function is being used')
+			self.logger.debug('a custom authentication function is being used')
 			self.auth_set(True)
 
 	def serve_forever(self, fork=False):
@@ -1379,13 +1402,22 @@ class AdvancedHTTPServer(object):
 				self.logger.info('forked child process: ' + str(child_pid))
 				return child_pid
 		self.server_started = True
-		self.http_server.serve_forever()
+		self.__is_shutdown.clear()
+		self.__should_stop.clear()
+		while not self.__should_stop.is_set():
+			read, _, _ = select.select(self._servers, [], [], 0)
+			for server in self._servers:
+				if server in read:
+					server.handle_request()
+		self.__is_shutdown.set()
 		return 0
 
 	def shutdown(self):
 		"""Shutdown the server and stop responding to requests."""
-		if self.server_started:
-			self.http_server.shutdown()
+		self.__should_stop.set()
+		self.__is_shutdown.wait()
+		for server in self._servers:
+			server.socket.close()
 
 	@property
 	def serve_files(self):
