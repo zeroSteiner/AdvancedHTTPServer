@@ -1,7 +1,7 @@
-:mod:`AdvancedHTTPServer` --- Python HTTP Server
+:mod:`advancedhttpserver` --- Python HTTP Server
 ================================================
 
-.. module:: AdvancedHTTPServer
+.. module:: advancedhttpserver
    :synopsis: Python HTTP Server
 
 
