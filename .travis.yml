@@ -6,9 +6,9 @@ python:
   - "3.4"
 
 install:
-  - pip install msgpack-python pylint sphinx==1.3
+  - pip install msgpack-python pylint sphinx==1.4.1 sphinx-rtd-theme
 
 script:
-  - pylint --rcfile .pylintrc AdvancedHTTPServer.py
+  - pylint --rcfile .pylintrc advancedhttpserver.py
   - python -m unittest -v tests
-  - sphinx-build docs/source docs/html
+  - sphinx-build -b html -E docs/source docs/html
