@@ -662,7 +662,6 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 		super(ServerNonThreaded, self).server_bind(*args, **kwargs)
 
 	def shutdown(self, *args, **kwargs):
-		super(ServerNonThreaded, self).shutdown(*args, **kwargs)
 		try:
 			self.socket.shutdown(socket.SHUT_RDWR)
 		except socket.error:
@@ -1405,10 +1404,9 @@ class AdvancedHTTPServer(object):
 		self.__is_shutdown.clear()
 		self.__should_stop.clear()
 		while not self.__should_stop.is_set():
-			read, _, _ = select.select(self._servers, [], [], 0)
-			for server in self._servers:
-				if server in read:
-					server.handle_request()
+			read_ready, _, _ = select.select(self._servers, [], [], 0)
+			for server in read_ready:
+				server.handle_request()
 		self.__is_shutdown.set()
 		return 0
 
@@ -1417,7 +1415,7 @@ class AdvancedHTTPServer(object):
 		self.__should_stop.set()
 		self.__is_shutdown.wait()
 		for server in self._servers:
-			server.socket.close()
+			server.shutdown()
 
 	@property
 	def serve_files(self):
