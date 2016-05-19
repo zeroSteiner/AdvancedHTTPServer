@@ -727,6 +727,22 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		"""The raw data that was parsed into the :py:attr:`.query_data` attribute."""
 		super(RequestHandler, self).__init__(*args, **kwargs)
 
+	def __get_handler(self, is_rpc=False):
+		handler = None
+		handler_map = (self.rpc_handler_map if is_rpc else self.handler_map)
+		for (path_regex, handler) in handler_map.items():
+			if re.match(path_regex, self.path):
+				break
+		else:
+			return (None, None)
+		is_method = False
+		self_handler = None
+		if hasattr(handler, '__name__'):
+			self_handler = getattr(self, handler.__name__, None)
+		if self_handler is not None and (handler == self_handler.__func__ or handler == self_handler):
+			is_method = True
+		return (handler, is_method)
+
 	def version_string(self):
 		return self.server.config['server_version']
 
@@ -918,19 +934,13 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			return
 
 		self.cookies = http.cookies.SimpleCookie(self.headers.get('cookie', ''))
-		for (path_regex, handler) in self.handler_map.items():
-			if re.match(path_regex, self.path):
-				self_handler = None
-				if hasattr(handler, '__name__'):
-					self_handler = getattr(self, handler.__name__, None)
-				try:
-					if self_handler is not None and (handler == self_handler.__func__ or handler == self_handler):
-						getattr(self, handler.__name__)(query)
-					else:
-						handler(self, query)
-				except Exception:
-					self.respond_server_error()
-				return
+		handler, is_method = self.__get_handler(is_rpc=False)
+		if handler is not None:
+			try:
+				handler(*((query,) if is_method else (self, query)))
+			except Exception:
+				self.respond_server_error()
+			return
 
 		if not self.server.config['serve_files']:
 			self.respond_not_found()
