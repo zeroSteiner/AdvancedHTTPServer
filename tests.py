@@ -83,13 +83,13 @@ class ServerTests(ServerTestCase):
 		self._test_serializer_obj(serializer, datetime.datetime.utcnow().date(), datetime.date)
 		self._test_serializer_obj(serializer, datetime.datetime.utcnow().time(), datetime.time)
 
-	def _rpc_test_double_handler(self, value):
+	def _rpc_test_double_handler(self, handler, value):
 		return value * 2
 
-	def _rpc_test_datetime_handler(self):
+	def _rpc_test_datetime_handler(self, handler):
 		return datetime.datetime.now()
 
-	def _rpc_test_throw_exception(self):
+	def _rpc_test_throw_exception(self, handler):
 		raise RuntimeError('this is an error!')
 
 	def setUp(self):

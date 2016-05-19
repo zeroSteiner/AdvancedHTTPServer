@@ -1175,15 +1175,13 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			self.send_error(400, 'Invalid Data')
 			return
 
-		rpc_handler = None
-		for (path_regex, handler) in self.rpc_handler_map.items():
-			if re.match(path_regex, self.path):
-				rpc_handler = handler
-				break
+		rpc_handler, is_method = self.__get_handler(is_rpc=True)
 		if not rpc_handler:
 			self.respond_server_error(501)
 			return
 
+		if not is_method:
+			meth_args = (self,) + meth_args
 		response = {'result': None, 'exception_occurred': False}
 		try:
 			response['result'] = rpc_handler(*meth_args, **meth_kwargs)
