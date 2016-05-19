@@ -698,15 +698,14 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		'.c':  'text/plain',
 		'.h':  'text/plain',
 	})
-
+	handler_map = {}
+	"""The dict object which maps regular expressions of resources to the functions which should handle them."""
+	rpc_handler_map = {}
+	"""The dict object which maps regular expressions of RPC functions to their handlers."""
 	def __init__(self, *args, **kwargs):
 		self.cookies = None
 		self.path = None
 		self.wfile = None
-		self.handler_map = {}
-		"""The dict object which maps regular expressions of resources to the functions which should handle them."""
-		self.rpc_handler_map = {}
-		"""The dict object which maps regular expressions of RPC functions to their handlers."""
 		self.server = args[2]
 		self.headers_active = False
 		"""Whether or not the request is in the sending headers phase."""
@@ -737,7 +736,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		called as part of the __init__ method and provides an opportunity
 		for the handler maps to be populated with entries.
 		"""
-		pass # over ride me
+		pass  # over ride me
 
 	def respond_file(self, file_path, attachment=False, query=None):
 		"""

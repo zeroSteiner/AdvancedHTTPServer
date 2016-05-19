@@ -46,6 +46,8 @@ kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
    redundant prefix removed
  - The `hmac_key` option is not longer supported
  - A single `AdvancedHTTPServer` instance can now be bound to multiple ports
+ - The handler_map and rpc_handler_map attributes are now class attributes by
+   default
 
 ## Powered By AdvancedHTTPServer
  - [King Phisher](https://github.com/securestate/king-phisher) Phishing Campaign Toolkit
