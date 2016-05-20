@@ -48,6 +48,8 @@ kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
  - A single `AdvancedHTTPServer` instance can now be bound to multiple ports
  - The handler_map and rpc_handler_map attributes are now class attributes by
    default
+ - The `RequestHandler.install_handlers` method has been renamed to
+   `__init_hook__`
 
 ## Powered By AdvancedHTTPServer
  - [King Phisher](https://github.com/securestate/king-phisher) Phishing Campaign Toolkit

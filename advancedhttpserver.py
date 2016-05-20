@@ -717,7 +717,6 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 					self.rpc_handler_map[path] = function
 				else:
 					self.handler_map[path] = function
-		self.install_handlers()
 
 		self.basic_auth_user = None
 		"""The name of the user if the current request is using basic authentication."""
@@ -725,7 +724,19 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		"""The parameter data that has been passed to the server parsed as a dict."""
 		self.raw_query_data = None
 		"""The raw data that was parsed into the :py:attr:`.query_data` attribute."""
+		self.config = self.server.config
+		"""A reference to the configuration provided by the server."""
+		self.__init_hook__()
 		super(RequestHandler, self).__init__(*args, **kwargs)
+
+	def __init_hook__(self):
+		"""
+		This method is meant to be over ridden by custom classes. It is
+		called as part of the __init__ method and provides an opportunity
+		for the handler maps to be populated with entries or the config to be
+		customized.
+		"""
+		pass  # over ride me
 
 	def __get_handler(self, is_rpc=False):
 		handler = None
@@ -744,15 +755,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		return (handler, is_method)
 
 	def version_string(self):
-		return self.server.config['server_version']
-
-	def install_handlers(self):
-		"""
-		This method is meant to be over ridden by custom classes. It is
-		called as part of the __init__ method and provides an opportunity
-		for the handler maps to be populated with entries.
-		"""
-		pass  # over ride me
+		return self.config['server_version']
 
 	def respond_file(self, file_path, attachment=False, query=None):
 		"""
@@ -795,7 +798,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		except os.error:
 			self.respond_not_found()
 			return None
-		if os.path.normpath(dir_path) != self.server.config['serve_files_root']:
+		if os.path.normpath(dir_path) != self.config['serve_files_root']:
 			dir_contents.append('..')
 		dir_contents.sort(key=lambda a: a.lower())
 		displaypath = html.escape(urllib.parse.unquote(self.path), quote=True)
@@ -892,7 +895,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		"""
 		self.send_response(401)
 		if request_authentication:
-			self.send_header('WWW-Authenticate', 'Basic realm="' + self.server.config['server_version'] + '"')
+			self.send_header('WWW-Authenticate', 'Basic realm="' + self.config['server_version'] + '"')
 		self.send_header('Content-Type', 'text/html')
 		self.end_headers()
 		self.wfile.write(b'Unauthorized\n')
@@ -926,11 +929,11 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			tmp_path = os.path.join(tmp_path, word)
 		self.path = tmp_path
 
-		if self.path == 'robots.txt' and self.server.config['serve_robots_txt']:
+		if self.path == 'robots.txt' and self.config['serve_robots_txt']:
 			self.send_response(200)
 			self.send_header('Content-Type', 'text/plain')
 			self.end_headers()
-			self.wfile.write(self.server.config['robots_txt'])
+			self.wfile.write(self.config['robots_txt'])
 			return
 
 		self.cookies = http.cookies.SimpleCookie(self.headers.get('cookie', ''))
@@ -942,11 +945,11 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 				self.respond_server_error()
 			return
 
-		if not self.server.config['serve_files']:
+		if not self.config['serve_files']:
 			self.respond_not_found()
 			return
 
-		file_path = self.server.config['serve_files_root']
+		file_path = self.config['serve_files_root']
 		file_path = os.path.join(file_path, tmp_path)
 		if os.path.isfile(file_path) and os.access(file_path, os.R_OK):
 			self.respond_file(file_path, query=query)
@@ -964,7 +967,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 				if os.path.isfile(index) and os.access(index, os.R_OK):
 					self.respond_file(index, query=query)
 					return
-			if self.server.config['serve_files_list_directories']:
+			if self.config['serve_files_list_directories']:
 				self.respond_list_directory(file_path, query=query)
 				return
 		self.respond_not_found()
@@ -1020,7 +1023,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		:rtype: bool
 		"""
 		try:
-			store = self.server.config.get('basic_auth')
+			store = self.config.get('basic_auth')
 			if store is None:
 				return True
 			auth_info = self.headers.get('Authorization')
