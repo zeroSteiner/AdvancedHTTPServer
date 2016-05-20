@@ -8,7 +8,7 @@
 Data
 ----
 
-.. data:: SERIALIZER_DRIVERS
+.. data:: g_serializer_drivers
    :annotation:
 
 Functions

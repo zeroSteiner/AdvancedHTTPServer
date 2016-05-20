@@ -50,6 +50,7 @@ kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
    default
  - The `RequestHandler.install_handlers` method has been renamed to
    `__init_hook__`
+ - `SERIALIZER_DRIVERS` was renamed to `g_serializer_drivers`
 
 ## Powered By AdvancedHTTPServer
  - [King Phisher](https://github.com/securestate/king-phisher) Phishing Campaign Toolkit

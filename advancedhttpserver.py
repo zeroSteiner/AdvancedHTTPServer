@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.0b1'
+__version__ = '2.0.0b2'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -128,8 +128,8 @@ else:
 	import urllib.parse
 	from configparser import ConfigParser
 
-GLOBAL_HANDLER_MAP = {}
-SERIALIZER_DRIVERS = {}
+g_handler_map = {}
+g_serializer_drivers = {}
 """Dictionary of available drivers for serialization."""
 
 def _serialize_ext_dump(obj):
@@ -157,7 +157,7 @@ def _json_default(obj):
 def _json_object_hook(obj):
 	return _serialize_ext_load(obj.get('__complex_type__'), obj.get('value'), obj)
 
-SERIALIZER_DRIVERS['application/json'] = {
+g_serializer_drivers['application/json'] = {
 	'dumps': lambda d: json.dumps(d, default=_json_default),
 	'loads': lambda d, e: json.loads(d, object_hook=_json_object_hook)
 }
@@ -182,7 +182,7 @@ else:
 			obj_value = obj_value.decode('utf-8')
 		obj_type = _MSGPACK_EXT_TYPES.get(code)
 		return _serialize_ext_load(obj_type, obj_value, default)
-	SERIALIZER_DRIVERS['binary/message-pack'] = {
+	g_serializer_drivers['binary/message-pack'] = {
 		'dumps': lambda d: msgpack.dumps(d, default=_msgpack_default),
 		'loads': lambda d, e: msgpack.loads(d, encoding=e, ext_hook=_msgpack_ext_hook)
 	}
@@ -413,9 +413,9 @@ class RegisterPath(object):
 			raise ValueError('unknown handler: ' + repr(handler))
 
 	def __call__(self, function):
-		handler_map = GLOBAL_HANDLER_MAP.get(self.handler, {})
+		handler_map = g_handler_map.get(self.handler, {})
 		handler_map[self.path] = (function, self.is_rpc)
-		GLOBAL_HANDLER_MAP[self.handler] = handler_map
+		g_handler_map[self.handler] = handler_map
 		return function
 
 class RPCError(Exception):
@@ -491,7 +491,7 @@ class RPCClient(object):
 		"""
 		Configure the serializer to use for communication with the server.
 		The serializer specified must be valid and in the
-		:py:data:`.SERIALIZER_DRIVERS` map.
+		:py:data:`.g_serializer_drivers` map.
 
 		:param str serializer_name: The name of the serializer to use.
 		:param str compression: The name of a compression library to use.
@@ -689,10 +689,10 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 	request handler as the first argument.
 	"""
 	if not mimetypes.inited:
-		mimetypes.init() # try to read system mime.types
+		mimetypes.init()  # try to read system mime.types
 	extensions_map = mimetypes.types_map.copy()
 	extensions_map.update({
-		'': 'application/octet-stream', # Default
+		'': 'application/octet-stream',  # Default
 		'.py': 'text/plain',
 		'.rb': 'text/plain',
 		'.c':  'text/plain',
@@ -710,7 +710,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		self.headers_active = False
 		"""Whether or not the request is in the sending headers phase."""
 		for map_name in (None, self.__class__.__name__):
-			handler_map = GLOBAL_HANDLER_MAP.get(map_name, {})
+			handler_map = g_handler_map.get(map_name, {})
 			for path, function_info in handler_map.items():
 				function, function_is_rpc = function_info
 				if function_is_rpc:
@@ -1247,7 +1247,7 @@ class Serializer(object):
 		:param str charset: The name of the encoding to use.
 		:param str compression: The compression library to use.
 		"""
-		if not name in SERIALIZER_DRIVERS:
+		if not name in g_serializer_drivers:
 			raise ValueError("unknown serializer '{0}'".format(name))
 		self.name = name
 		self._charset = charset
@@ -1290,7 +1290,7 @@ class Serializer(object):
 		:return: The serialized representation of the object.
 		:rtype: bytes
 		"""
-		data = SERIALIZER_DRIVERS[self.name]['dumps'](data)
+		data = g_serializer_drivers[self.name]['dumps'](data)
 		if sys.version_info[0] == 3 and isinstance(data, str):
 			data = data.encode(self._charset)
 		if self._compression == 'zlib':
@@ -1311,7 +1311,7 @@ class Serializer(object):
 			data = zlib.decompress(data)
 		if sys.version_info[0] == 3 and self.name.startswith('application/'):
 			data = data.decode(self._charset)
-		data = SERIALIZER_DRIVERS[self.name]['loads'](data, (self._charset if sys.version_info[0] == 3 else None))
+		data = g_serializer_drivers[self.name]['loads'](data, (self._charset if sys.version_info[0] == 3 else None))
 		if isinstance(data, list):
 			data = tuple(data)
 		return data
