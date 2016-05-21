@@ -49,7 +49,7 @@ kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
  - The handler_map and rpc_handler_map attributes are now class attributes by
    default
  - The `RequestHandler.install_handlers` method has been renamed to
-   `__init_hook__`
+   `on_init`
  - `SERIALIZER_DRIVERS` was renamed to `g_serializer_drivers`
 
 ## Powered By AdvancedHTTPServer

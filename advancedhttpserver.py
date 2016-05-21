@@ -76,6 +76,7 @@ __all__ = (
 	'RPCClientCached',
 	'RPCError',
 	'ServerTestCase',
+	'WebSocketHandler',
 	'build_server_from_argparser',
 	'build_server_from_config'
 )
@@ -99,6 +100,7 @@ import socket
 import sqlite3
 import ssl
 import string
+import struct
 import sys
 import threading
 import time
@@ -702,6 +704,8 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 	"""The dict object which maps regular expressions of resources to the functions which should handle them."""
 	rpc_handler_map = {}
 	"""The dict object which maps regular expressions of RPC functions to their handlers."""
+	web_socket_handler = None
+	"""An optional class to handle Web Sockets. This class must be derived from :py:class:`.WebSocketHandler`."""
 	def __init__(self, *args, **kwargs):
 		self.cookies = None
 		self.path = None
@@ -726,10 +730,10 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		"""The raw data that was parsed into the :py:attr:`.query_data` attribute."""
 		self.config = self.server.config
 		"""A reference to the configuration provided by the server."""
-		self.__init_hook__()
+		self.on_init()
 		super(RequestHandler, self).__init__(*args, **kwargs)
 
-	def __init_hook__(self):
+	def on_init(self):
 		"""
 		This method is meant to be over ridden by custom classes. It is
 		called as part of the __init__ method and provides an opportunity
@@ -981,7 +985,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		super(RequestHandler, self).end_headers()
 		self.headers_active = False
 		if self.command == 'HEAD':
-			self.wfile.close() # pylint: disable=access-member-before-definition
+			self.wfile.close()  # pylint: disable=access-member-before-definition
 			self.wfile = open(os.devnull, 'wb')
 
 	def guess_mime_type(self, path):
@@ -1087,6 +1091,9 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 	def do_GET(self):
 		if not self.check_authorization():
 			self.respond_unauthorized(request_authentication=True)
+			return
+		if self.web_socket_handler is not None and self.headers.get('Upgrade', None) == 'websocket':
+			self.web_socket_handler(self)  # pylint: disable=not-callable
 			return
 		uri = urllib.parse.urlparse(self.path)
 		self.path = uri.path
@@ -1236,6 +1243,114 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		if idx > 0:
 			encoding = (header[idx + 8:].split(' ', 1)[0] or encoding)
 		return encoding
+
+class WebSocketHandler(object):
+	_opcode_continue = 0x00
+	_opcode_text = 0x01
+	_opcode_binary = 0x02
+	_opcode_close = 0x08
+	_opcode_ping = 0x09
+	_opcode_pong = 0x0a
+	guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
+	def __init__(self, handler):
+		self.handler = handler
+		if not hasattr(self, 'logger'):
+			self.logger = logging.getLogger('AdvancedHTTPServer.WebSocketHandler')
+		headers = self.handler.headers
+		key = headers.get('Sec-WebSocket-Key', None)
+		digest = hashlib.sha1((key + self.guid).encode('utf-8')).digest()
+		handler.send_response(101, 'Switching Protocols')
+		handler.send_header('Upgrade', 'websocket')
+		handler.send_header('Connection', 'Upgrade')
+		handler.send_header('Sec-WebSocket-Accept', base64.b64encode(digest).decode('utf-8'))
+		handler.end_headers()
+		self.lock = threading.Lock()
+
+		self.connected = True
+		self.logger.info('web socket has been connected')
+		self.on_connected()
+
+		while self.connected:
+			try:
+				self._process_message()
+			except Exception:
+				self.logger.error('there was an error processing messages', exc_info=True)
+				self._close()
+
+	def _process_message(self):
+		select.select([self.handler.rfile], [], [])
+		opcode = self.handler.rfile.read(1)
+		if not opcode:
+			self._close()
+			return
+		opcode = ord(opcode) & 0x0f
+		length = ord(self.handler.rfile.read(1)) & 0x7f
+		if length == 126:
+			length = struct.unpack('>H', self.handler.rfile.read(2))[0]
+		elif length == 127:
+			length = struct.unpack('>Q', self.handler.rfile.read(8))[0]
+		masks = [b for b in self.handler.rfile.read(4)]
+		if sys.version_info[0] < 3:
+			masks = map(ord, masks)
+		decoded = b''
+		for char in self.handler.rfile.read(length):
+			if sys.version_info[0] < 3:
+				decoded += chr(ord(char) ^ masks[len(decoded) % 4])
+			else:
+				decoded += struct.pack('B', char ^ masks[len(decoded) % 4])
+		self.logger.debug("recevied message ({0:,} bytes, 0x{1:02x} opcode)".format(len(decoded), opcode))
+		self._on_message(opcode, decoded)
+
+	def _close(self):
+		# avoid closing a single socket two time for send and receive.
+		if not self.connected:
+			return
+		with self.lock:
+			self.handler.close_connection = 1
+			if select.select([], [self.handler.wfile], [], 0)[1]:
+				self.handler.wfile.write(b'\x88\x00')
+			self.connected = False
+		self.on_closed()
+
+	def _on_message(self, opcode, message):
+		# close
+		if opcode == self._opcode_close:
+			self._close()
+		elif opcode == self._opcode_ping:
+			self.send_message(self._opcode_pong, message)
+		elif opcode == self._opcode_pong:
+			pass
+		elif opcode in (self._opcode_continue, self._opcode_text, self._opcode_binary):
+			self.on_message(opcode, message)
+
+	def send_message(self, opcode, message):
+		length = len(message)
+		if not select.select([], [self.handler.wfile], [], 0)[1]:
+			self._close()
+			return
+		try:
+			self.handler.wfile.write(chr(0x80 + opcode))
+			if length <= 125:
+				self.handler.wfile.write(chr(length))
+			elif 126 <= length <= 65535:
+				self.handler.wfile.write(chr(126))
+				self.handler.wfile.write(struct.pack('>H', length))
+			else:
+				self.handler.wfile.write(chr(127))
+				self.handler.wfile.write(struct.pack('>Q', length))
+			if length > 0:
+				self.handler.wfile.write(message)
+		except Exception:
+			self._close()
+
+	def on_closed(self):
+		pass
+
+	def on_connected(self):
+		pass
+
+	def on_message(self, opcode, message):
+		pass
 
 class Serializer(object):
 	"""
