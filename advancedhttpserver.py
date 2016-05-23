@@ -1270,20 +1270,25 @@ class WebSocketHandler(object):
 		self.logger.info('web socket has been connected')
 		self.on_connected()
 
+		self._last_buffer = b''
+		self._last_opcode = 0
+
 		while self.connected:
 			try:
 				self._process_message()
 			except Exception:
 				self.logger.error('there was an error processing messages', exc_info=True)
-				self._close()
+				self.close()
 
 	def _process_message(self):
 		select.select([self.handler.rfile], [], [])
-		opcode = self.handler.rfile.read(1)
-		if not opcode:
-			self._close()
+		byte_0 = self.handler.rfile.read(1)
+		if not byte_0:
+			self.close()
 			return
-		opcode = ord(opcode) & 0x0f
+		byte_0 = ord(byte_0)
+		fin = bool(byte_0 & 0x80)
+		opcode = byte_0 & 0x0f
 		length = ord(self.handler.rfile.read(1)) & 0x7f
 		if length == 126:
 			length = struct.unpack('>H', self.handler.rfile.read(2))[0]
@@ -1298,11 +1303,18 @@ class WebSocketHandler(object):
 				decoded += chr(ord(char) ^ masks[len(decoded) % 4])
 			else:
 				decoded += struct.pack('B', char ^ masks[len(decoded) % 4])
-		self.logger.debug("recevied message ({0:,} bytes, 0x{1:02x} opcode)".format(len(decoded), opcode))
-		self._on_message(opcode, decoded)
+		self.logger.debug("received message (len: {0:,} opcode: 0x{1:02x} fin: {2})".format(len(decoded), opcode, fin))
+		if fin:
+			self.on_message(opcode or self._last_opcode, self._last_buffer + decoded)
+			return
+		if opcode:
+			self._last_opcode = opcode
+			self._last_buffer = decoded
+		else:
+			self._last_buffer += decoded
 
-	def _close(self):
-		# avoid closing a single socket two time for send and receive.
+
+	def close(self):
 		if not self.connected:
 			return
 		with self.lock:
@@ -1312,21 +1324,10 @@ class WebSocketHandler(object):
 			self.connected = False
 		self.on_closed()
 
-	def _on_message(self, opcode, message):
-		# close
-		if opcode == self._opcode_close:
-			self._close()
-		elif opcode == self._opcode_ping:
-			self.send_message(self._opcode_pong, message)
-		elif opcode == self._opcode_pong:
-			pass
-		elif opcode in (self._opcode_continue, self._opcode_text, self._opcode_binary):
-			self.on_message(opcode, message)
-
 	def send_message(self, opcode, message):
 		length = len(message)
 		if not select.select([], [self.handler.wfile], [], 0)[1]:
-			self._close()
+			self.close()
 			return
 		try:
 			self.handler.wfile.write(chr(0x80 + opcode))
@@ -1341,7 +1342,7 @@ class WebSocketHandler(object):
 			if length > 0:
 				self.handler.wfile.write(message)
 		except Exception:
-			self._close()
+			self.close()
 
 	def on_closed(self):
 		pass
@@ -1350,6 +1351,24 @@ class WebSocketHandler(object):
 		pass
 
 	def on_message(self, opcode, message):
+		# close
+		if opcode == self._opcode_close:
+			self.close()
+		elif opcode == self._opcode_ping:
+			self.send_message(self._opcode_pong, message)
+		elif opcode == self._opcode_pong:
+			pass
+		elif opcode == self._opcode_binary:
+			self.on_message_binary(message)
+		elif opcode == self._opcode_text:
+			self.on_message_text(message.decode('utf-8'))
+		elif opcode == self._opcode_continue:
+			pass
+
+	def on_message_binary(self, message):
+		pass
+
+	def on_message_text(self, message):
 		pass
 
 class Serializer(object):
@@ -1469,9 +1488,9 @@ class AdvancedHTTPServer(object):
 		self.ssl_keyfile = ssl_keyfile
 		if not hasattr(self, 'logger'):
 			self.logger = logging.getLogger('AdvancedHTTPServer')
-		self.server_started = False
 		self.__should_stop = threading.Event()
 		self.__is_shutdown = threading.Event()
+		self.__server_thread = None
 
 		self.config = {
 			'basic_auth': None,
@@ -1510,6 +1529,10 @@ class AdvancedHTTPServer(object):
 			self.logger.debug('a custom authentication function is being used')
 			self.auth_set(True)
 
+	@property
+	def server_started(self):
+		return self.__server_thread is not None
+
 	def serve_forever(self, fork=False):
 		"""
 		Start handling requests. This method must be called and does not
@@ -1525,7 +1548,7 @@ class AdvancedHTTPServer(object):
 			if child_pid != 0:
 				self.logger.info('forked child process: ' + str(child_pid))
 				return child_pid
-		self.server_started = True
+		self.__server_thread = threading.current_thread()
 		self.__is_shutdown.clear()
 		self.__should_stop.clear()
 		while not self.__should_stop.is_set():
@@ -1538,7 +1561,10 @@ class AdvancedHTTPServer(object):
 	def shutdown(self):
 		"""Shutdown the server and stop responding to requests."""
 		self.__should_stop.set()
-		self.__is_shutdown.wait()
+		if self.__server_thread == threading.current_thread():
+			self.__is_shutdown.set()
+		else:
+			self.__is_shutdown.wait()
 		for server in self._servers:
 			server.shutdown()
 
