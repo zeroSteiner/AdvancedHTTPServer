@@ -51,6 +51,7 @@ kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
  - The `RequestHandler.install_handlers` method has been renamed to
    `on_init`
  - `SERIALIZER_DRIVERS` was renamed to `g_serializer_drivers`
+ - Support for multiple hostnames with SSL using the SNI extension
 
 ## Powered By AdvancedHTTPServer
  - [King Phisher](https://github.com/securestate/king-phisher) Phishing Campaign Toolkit

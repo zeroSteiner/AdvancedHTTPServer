@@ -133,6 +133,8 @@ else:
 g_handler_map = {}
 g_serializer_drivers = {}
 """Dictionary of available drivers for serialization."""
+g_ssl_has_server_sni = (ssl.HAS_SNI and sys.version_info >= ((2, 7, 9) if sys.version_info[0] < 3 else (3, 4)))
+"""An indication of if the environment offers server side SNI support."""
 
 def _serialize_ext_dump(obj):
 	if obj.__class__ == datetime.date:
@@ -1313,7 +1315,6 @@ class WebSocketHandler(object):
 		else:
 			self._last_buffer += decoded
 
-
 	def close(self):
 		if not self.connected:
 			return
@@ -1502,32 +1503,64 @@ class AdvancedHTTPServer(object):
 			'server_version': 'HTTPServer/' + __version__
 		}
 
-		if ssl_version is None or isinstance(ssl_version, str):
-			ssl_version = resolve_ssl_protocol_version(ssl_version)
-
 		self._servers = []
 		if use_threads:
 			server_klass = ServerThreaded
 		else:
 			server_klass = ServerNonThreaded
+
 		for address in addresses:
-			use_ssl = (len(address) == 3 and address[2])
 			server = server_klass((address[0], address[1]), handler_klass, config=self.config)
-			if use_ssl:
-				ssl.wrap_socket(
-					server.socket,
-					keyfile=ssl_keyfile,
-					certfile=ssl_certfile,
-					server_side=True,
-					ssl_version=ssl_version
-				)
-				server.using_ssl = True
+			use_ssl = (len(address) == 3 and address[2])
+			server.using_ssl = use_ssl
 			self._servers.append(server)
-			self.logger.info("listening on {0}:{1} (with{2} ssl)".format(address[0], address[1], ('' if use_ssl else 'out')))
+			self.logger.info("listening on {0}:{1}".format(address[0], address[1]) + (' with ssl' if use_ssl else ''))
+
+		self._ssl_sni_ctxs = None
+		if any([server.using_ssl for server in self._servers]):
+			self._ssl_sni_ctxs = {}
+			if ssl_version is None or isinstance(ssl_version, str):
+				ssl_version = resolve_ssl_protocol_version(ssl_version)
+			self._ssl_ctx = ssl.SSLContext(ssl_version)
+			self._ssl_ctx.load_cert_chain(ssl_certfile, keyfile=ssl_keyfile)
+			if g_ssl_has_server_sni:
+				self._ssl_ctx.set_servername_callback(self._ssl_servername_callback)
+			for server in self._servers:
+				if not server.using_ssl:
+					continue
+				server.socket = self._ssl_ctx.wrap_socket(server.socket, server_side=True)
 
 		if hasattr(handler_klass, 'custom_authentication'):
 			self.logger.debug('a custom authentication function is being used')
 			self.auth_set(True)
+
+	def _ssl_servername_callback(self, sock, hostname, context):
+		new_context = self._ssl_sni_ctxs.get(hostname)
+		if new_context is None:
+			return None
+		sock.context = new_context
+		return None
+
+	def add_sni_cert(self, hostname, ssl_certfile=None, ssl_keyfile=None, ssl_version=None):
+		"""
+		Add an SSL certificate for a specific hostname as supported by SSL's
+		server name indicator extension. See :rfc:`3546` for more details on
+		SSL extensions.
+
+		:param str hostname: The hostname for this configuration.
+		:param str ssl_certfile: An SSL certificate file to use, setting this enables SSL.
+		:param str ssl_keyfile: An SSL certificate file to use.
+		:param ssl_version: The SSL protocol version to use.
+		"""
+		if not g_ssl_has_server_sni:
+			raise RuntimeError('the ssl server name indicator extension is unavailable')
+		if self._ssl_sni_ctxs is None:
+			raise RuntimeError('ssl was not enabled on initialization')
+		if ssl_version is None or isinstance(ssl_version, str):
+			ssl_version = resolve_ssl_protocol_version(ssl_version)
+		ssl_ctx = ssl.SSLContext(ssl_version)
+		ssl_ctx.load_cert_chain(ssl_certfile, keyfile=ssl_keyfile)
+		self._ssl_sni_ctxs[hostname] = ssl_ctx
 
 	@property
 	def server_started(self):

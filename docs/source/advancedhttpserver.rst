@@ -11,6 +11,9 @@ Data
 .. data:: g_serializer_drivers
    :annotation:
 
+.. data:: g_ssl_has_server_sni
+   :annotation:
+
 Functions
 ---------
 
