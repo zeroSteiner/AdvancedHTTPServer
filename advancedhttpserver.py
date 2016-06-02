@@ -851,12 +851,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 
 	def respond_not_found(self):
 		"""Respond to the client with a default 404 message."""
-		self.send_response(404)
-		self.send_header('Content-Type', 'text/html')
-		message = b'Resource Not Found\n'
-		self.send_header('Content-Length', len(message))
-		self.end_headers()
-		self.wfile.write(message)
+		self.send_response_full(b'Resource Not Found\n', status=404)
 		return
 
 	def respond_redirect(self, location='/'):
@@ -867,6 +862,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		:param str location: The new location to redirect the client to.
 		"""
 		self.send_response(301)
+		self.send_header('Content-Length', 0)
 		self.send_header('Location', location)
 		self.end_headers()
 		return
@@ -912,14 +908,10 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 
 		:param bool request_authentication: Whether to request basic authentication information by sending a WWW-Authenticate header.
 		"""
-		self.send_response(401)
+		headers = {}
 		if request_authentication:
-			self.send_header('WWW-Authenticate', 'Basic realm="' + self.config['server_version'] + '"')
-		self.send_header('Content-Type', 'text/html')
-		message = b'Unauthorized\n'
-		self.send_header('Content-Length', len(message))
-		self.end_headers()
-		self.wfile.write(message)
+			headers['WWW-Authenticate'] = 'Basic realm="' + self.config['server_version'] + '"'
+		self.send_response_full(b'Unauthorized', status=401, headers=headers)
 		return
 
 	def dispatch_handler(self, query=None):
@@ -951,11 +943,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		self.path = tmp_path
 
 		if self.path == 'robots.txt' and self.config['serve_robots_txt']:
-			self.send_response(200)
-			self.send_header('Content-Type', 'text/plain')
-			self.send_header('Content-Length', len(self.config['robots_txt']))
-			self.end_headers()
-			self.wfile.write(self.config['robots_txt'])
+			self.send_response_full(self.config['robots_txt'])
 			return
 
 		self.cookies = http.cookies.SimpleCookie(self.headers.get('cookie', ''))
@@ -1006,6 +994,17 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		else:
 			connection = 'close'
 		self.send_header('Connection', connection)
+
+	def send_response_full(self, message, content_type='text/plain; charset=UTF-8', status=200, headers=None):
+		self.send_response(status)
+		self.send_header('Content-Type', content_type)
+		self.send_header('Content-Length', len(message))
+		if headers is not None:
+			for header, value in headers.items():
+				self.send_header(header, value)
+		self.end_headers()
+		self.wfile.write(message)
+		return
 
 	def end_headers(self):
 		super(RequestHandler, self).end_headers()
