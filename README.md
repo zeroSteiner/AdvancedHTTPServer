@@ -52,6 +52,8 @@ kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
    `on_init`
  - `SERIALIZER_DRIVERS` was renamed to `g_serializer_drivers`
  - Support for multiple hostnames with SSL using the SNI extension
+ - Support for persistent HTTP 1.1 TCP connections
+
 
 ## Powered By AdvancedHTTPServer
  - [King Phisher](https://github.com/securestate/king-phisher) Phishing Campaign Toolkit

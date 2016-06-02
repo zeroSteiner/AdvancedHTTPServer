@@ -106,7 +106,13 @@ class ServerTests(ServerTestCase):
 			klass = RPCClientCached
 		else:
 			klass = RPCClient
-		return klass(self.server_address, username=username, password=password)
+		rpc_client = klass(
+			self.server_address,
+			username=username,
+			password=password,
+			use_ssl=self.config.has_option(self.config_section, 'ssl_cert')
+		)
+		return rpc_client
 
 	def test_authentication_hash(self):
 		username = random_string(8)
@@ -129,6 +135,28 @@ class ServerTests(ServerTestCase):
 		auth_headers = {'Authorization': 'Basic ' + base64.b64encode("{0}:{1}".format(random_string(8), random_string(12)).encode('utf-8')).decode('utf-8')}
 		response = self.http_request(self.test_resource, 'GET', headers=auth_headers)
 		self.assertHTTPStatus(response, 401)
+
+	def test_connection_close(self):
+		headers = {'Connection': 'close'}
+
+		response = self.http_request('/' + random_string(30), 'GET', headers=headers)
+		self.assertHTTPStatus(response, 404)
+		self.assertIsNone(self.http_connection.sock)
+
+		response = self.http_request(self.test_resource, 'GET', headers=headers)
+		self.assertHTTPStatus(response, 200)
+		self.assertIsNone(self.http_connection.sock)
+
+	def test_connection_keep_alive(self):
+		headers = {'Connection': 'keep-alive'}
+
+		response = self.http_request('/' + random_string(30), 'GET', headers=headers)
+		self.assertHTTPStatus(response, 404)
+		self.assertIsNotNone(self.http_connection.sock)
+
+		response = self.http_request(self.test_resource, 'GET', headers=headers)
+		self.assertHTTPStatus(response, 200)
+		self.assertIsNotNone(self.http_connection.sock)
 
 	def test_fake_resource(self):
 		response = self.http_request('/' + random_string(30), 'GET')

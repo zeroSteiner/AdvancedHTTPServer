@@ -461,13 +461,14 @@ class RPCClient(object):
 	This object uses locks internally to be thread safe. Only one thread
 	can execute a function at a time.
 	"""
-	def __init__(self, address, use_ssl=False, username=None, password=None, uri_base='/'):
+	def __init__(self, address, use_ssl=False, username=None, password=None, uri_base='/', ssl_context=None):
 		"""
-		:param tuple address: The address of the server to conenct to as (host, port).
+		:param tuple address: The address of the server to connect to as (host, port).
 		:param bool use_ssl: Whether to connect with SSL or not.
 		:param str username: The username to authenticate with.
 		:param str password: The password to authenticate with.
 		:param str uri_base: An optional prefix for all methods.
+		:param ssl_context: An optional SSL context to use for SSL related options.
 		"""
 		self.host = str(address[0])
 		self.port = int(address[1])
@@ -477,6 +478,7 @@ class RPCClient(object):
 		self.headers = None
 		"""An optional dictionary of headers to include with each RPC request."""
 		self.use_ssl = bool(use_ssl)
+		self.ssl_context = ssl_context
 		self.uri_base = str(uri_base)
 		self.username = (None if username is None else str(username))
 		self.password = (None if password is None else str(password))
@@ -521,7 +523,7 @@ class RPCClient(object):
 		"""Reconnect to the remote server."""
 		self.lock.acquire()
 		if self.use_ssl:
-			self.client = http.client.HTTPSConnection(self.host, self.port)
+			self.client = http.client.HTTPSConnection(self.host, self.port, context=self.ssl_context)
 		else:
 			self.client = http.client.HTTPConnection(self.host, self.port)
 		self.lock.release()
@@ -1808,7 +1810,11 @@ class ServerTestCase(unittest.TestCase):
 		self.assertTrue(self.server_thread.is_alive())
 		self.shutdown_requested = False
 		self.server_address = (self.config.get(self.config_section, 'ip'), self.config.getint(self.config_section, 'port'))
-		self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
+		if self.config.has_option(self.config_section, 'ssl_cert'):
+			self.http_connection = http.client.HTTPSConnection(self.server_address[0], self.server_address[1])
+		else:
+			self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
+		self.http_connection.connect()
 
 	def _test_resource_handler(self, handler, query):
 		del query
@@ -1843,7 +1849,8 @@ class ServerTestCase(unittest.TestCase):
 		:rtype: :py:class:`http.client.HTTPResponse`
 		"""
 		headers = (headers or {})
-		headers['Connection'] = 'keep-alive'
+		if not 'Connection' in headers:
+			headers['Connection'] = 'keep-alive'
 		self.http_connection.request(method, resource, headers=headers)
 		time.sleep(0.025)
 		response = self.http_connection.getresponse()
