@@ -853,8 +853,10 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		"""Respond to the client with a default 404 message."""
 		self.send_response(404)
 		self.send_header('Content-Type', 'text/html')
+		message = b'Resource Not Found\n'
+		self.send_header('Content-Length', len(message))
 		self.end_headers()
-		self.wfile.write(b'Resource Not Found\n')
+		self.wfile.write(message)
 		return
 
 	def respond_redirect(self, location='/'):
@@ -1156,6 +1158,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		if 'RPC' in available_methods and len(self.rpc_handler_map) == 0:
 			available_methods.remove('RPC')
 		self.send_response(200)
+		self.send_header('Content-Length', 0)
 		self.send_header('Allow', ', '.join(available_methods))
 		self.end_headers()
 
@@ -1806,14 +1809,13 @@ class ServerTestCase(unittest.TestCase):
 		self.assertTrue(self.server_thread.is_alive())
 		self.shutdown_requested = False
 		self.server_address = (self.config.get(self.config_section, 'ip'), self.config.getint(self.config_section, 'port'))
-		self.http_connection = None  # http.client.HTTPConnection(self.server_address[0], self.server_address[1])
+		self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
 
 	def _test_resource_handler(self, handler, query):
 		del query
+		message = b'Hello World!\n'
 		handler.send_response(200)
-		handler.end_headers()
-		message = b'Hello World!\r\n\r\n'
-		handler.send_response(200)
+		handler.send_header('Content-Type', 'text/html; charset=utf-8')
 		handler.send_header('Content-Length', len(message))
 		handler.end_headers()
 		handler.wfile.write(message)
@@ -1841,20 +1843,18 @@ class ServerTestCase(unittest.TestCase):
 		:return: The HTTP response object.
 		:rtype: :py:class:`http.client.HTTPResponse`
 		"""
-		self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
 		headers = (headers or {})
-		headers['Connection'] = 'close' #keep-alive'
+		headers['Connection'] = 'keep-alive'
 		self.http_connection.request(method, resource, headers=headers)
 		time.sleep(0.025)
 		response = self.http_connection.getresponse()
 		response.data = response.read()
-		self.http_connection.close()
 		return response
 
 	def tearDown(self):
 		if not self.shutdown_requested:
 			self.assertTrue(self.server_thread.is_alive())
-		#self.http_connection.close()
+		self.http_connection.close()
 		self.server.shutdown()
 		self.server_thread.join(10.0)
 		self.assertFalse(self.server_thread.is_alive())
