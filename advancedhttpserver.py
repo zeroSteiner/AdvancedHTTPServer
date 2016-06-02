@@ -487,6 +487,9 @@ class RPCClient(object):
 		self.set_serializer('application/json')
 		self.reconnect()
 
+	def __del__(self):
+		self.client.close()
+
 	def __reduce__(self):
 		address = (self.host, self.port)
 		return (self.__class__, (address, self.use_ssl, self.username, self.password, self.uri_base))
@@ -541,6 +544,7 @@ class RPCClient(object):
 			headers.update(self.headers)
 		headers['Content-Type'] = self.serializer.content_type
 		headers['Content-Length'] = str(len(options))
+		headers['Connection'] = 'close'
 
 		if self.username is not None and self.password is not None:
 			headers['Authorization'] = 'Basic ' + base64.b64encode((self.username + ':' + self.password).encode('UTF-8')).decode('UTF-8')
@@ -702,6 +706,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		'.c':  'text/plain',
 		'.h':  'text/plain',
 	})
+	protocol_version = 'HTTP/1.1'
 	handler_map = {}
 	"""The dict object which maps regular expressions of resources to the functions which should handle them."""
 	rpc_handler_map = {}
@@ -712,6 +717,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		self.cookies = None
 		self.path = None
 		self.wfile = None
+		self._wfile = None
 		self.server = args[2]
 		self.headers_active = False
 		"""Whether or not the request is in the sending headers phase."""
@@ -734,6 +740,11 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		"""A reference to the configuration provided by the server."""
 		self.on_init()
 		super(RequestHandler, self).__init__(*args, **kwargs)
+
+	def setup(self, *args, **kwargs):
+		ret = super(RequestHandler, self).setup(*args, **kwargs)
+		self._wfile = self.wfile
+		return ret
 
 	def on_init(self):
 		"""
@@ -832,7 +843,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 
 		self.send_response(200)
 		self.send_header('Content-Type', 'text/html; charset=' + encoding)
-		self.send_header('Content-Length', str(length))
+		self.send_header('Content-Length', length)
 		self.end_headers()
 		shutil.copyfileobj(f, self.wfile)
 		f.close()
@@ -903,8 +914,10 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		if request_authentication:
 			self.send_header('WWW-Authenticate', 'Basic realm="' + self.config['server_version'] + '"')
 		self.send_header('Content-Type', 'text/html')
+		message = b'Unauthorized\n'
+		self.send_header('Content-Length', len(message))
 		self.end_headers()
-		self.wfile.write(b'Unauthorized\n')
+		self.wfile.write(message)
 		return
 
 	def dispatch_handler(self, query=None):
@@ -938,6 +951,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		if self.path == 'robots.txt' and self.config['serve_robots_txt']:
 			self.send_response(200)
 			self.send_header('Content-Type', 'text/plain')
+			self.send_header('Content-Length', len(self.config['robots_txt']))
 			self.end_headers()
 			self.wfile.write(self.config['robots_txt'])
 			return
@@ -980,6 +994,9 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		return
 
 	def send_response(self, *args, **kwargs):
+		if self.wfile != self._wfile:
+			self.wfile.close()
+			self.wfile = self._wfile
 		super(RequestHandler, self).send_response(*args, **kwargs)
 		self.headers_active = True
 
@@ -987,7 +1004,6 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		super(RequestHandler, self).end_headers()
 		self.headers_active = False
 		if self.command == 'HEAD':
-			self.wfile.close()  # pylint: disable=access-member-before-definition
 			self.wfile = open(os.devnull, 'wb')
 
 	def guess_mime_type(self, path):
@@ -1094,7 +1110,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		if not self.check_authorization():
 			self.respond_unauthorized(request_authentication=True)
 			return
-		if self.web_socket_handler is not None and self.headers.get('Upgrade', None) == 'websocket':
+		if self.web_socket_handler is not None and self.headers.get('Upgrade', None).lower() == 'websocket':
 			self.web_socket_handler(self)  # pylint: disable=not-callable
 			return
 		uri = urllib.parse.urlparse(self.path)
@@ -1262,7 +1278,7 @@ class WebSocketHandler(object):
 		key = headers.get('Sec-WebSocket-Key', None)
 		digest = hashlib.sha1((key + self.guid).encode('utf-8')).digest()
 		handler.send_response(101, 'Switching Protocols')
-		handler.send_header('Upgrade', 'websocket')
+		handler.send_header('Upgrade', 'WebSocket')
 		handler.send_header('Connection', 'Upgrade')
 		handler.send_header('Sec-WebSocket-Accept', base64.b64encode(digest).decode('utf-8'))
 		handler.end_headers()
@@ -1545,7 +1561,8 @@ class AdvancedHTTPServer(object):
 		"""
 		Add an SSL certificate for a specific hostname as supported by SSL's
 		server name indicator extension. See :rfc:`3546` for more details on
-		SSL extensions.
+		SSL extensions. In order to use this method, the server instance must
+		have been initialized with at least one address configured for SSL.
 
 		:param str hostname: The hostname for this configuration.
 		:param str ssl_certfile: An SSL certificate file to use, setting this enables SSL.
@@ -1777,7 +1794,7 @@ class ServerTestCase(unittest.TestCase):
 		self.assertTrue(self.server_thread.is_alive())
 		self.shutdown_requested = False
 		self.server_address = (self.config.get(self.config_section, 'ip'), self.config.getint(self.config_section, 'port'))
-		self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
+		self.http_connection = None  # http.client.HTTPConnection(self.server_address[0], self.server_address[1])
 
 	def _test_resource_handler(self, handler, query):
 		del query
@@ -1812,16 +1829,20 @@ class ServerTestCase(unittest.TestCase):
 		:return: The HTTP response object.
 		:rtype: :py:class:`http.client.HTTPResponse`
 		"""
+		self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
 		headers = (headers or {})
+		headers['Connection'] = 'close'
 		self.http_connection.request(method, resource, headers=headers)
 		time.sleep(0.025)
 		response = self.http_connection.getresponse()
+		response.data = response.read()
+		self.http_connection.close()
 		return response
 
 	def tearDown(self):
 		if not self.shutdown_requested:
 			self.assertTrue(self.server_thread.is_alive())
-		self.http_connection.close()
+		#self.http_connection.close()
 		self.server.shutdown()
 		self.server_thread.join(10.0)
 		self.assertFalse(self.server_thread.is_alive())

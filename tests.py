@@ -147,8 +147,7 @@ class ServerTests(ServerTestCase):
 	def test_robots_dot_text(self):
 		response = self.http_request('/robots.txt', 'GET')
 		self.assertHTTPStatus(response, 200)
-		response_data = response.read()
-		self.assertEqual(b'User-agent: *\nDisallow: /\n', response_data)
+		self.assertEqual(b'User-agent: *\nDisallow: /\n', response.data)
 		self.server.serve_robots_txt = False
 		response = self.http_request('/robots.txt', 'GET')
 		self.assertHTTPStatus(response, 404)
@@ -209,18 +208,17 @@ class ServerTests(ServerTestCase):
 	def test_verb_get(self):
 		response = self.http_request(self.test_resource, 'GET')
 		self.assertHTTPStatus(response, 200)
-		response_data = response.read()
-		self.assertTrue(b'Hello World!' in response_data)
+		self.assertTrue(b'Hello World!' in response.data)
 
 	def test_verb_head(self):
 		response = self.http_request(self.test_resource, 'HEAD')
 		self.assertHTTPStatus(response, 200)
-		self.assertTrue(len(response.read()) == 0)
+		self.assertTrue(len(response.data) == 0)
 
 	def test_verb_options(self):
 		response = self.http_request(self.test_resource, 'OPTIONS')
 		self.assertHTTPStatus(response, 200)
-		self.assertTrue(len(response.read()) == 0)
+		self.assertTrue(len(response.data) == 0)
 		allow_header = response.getheader('Allow')
 		self.assertIsNotNone(allow_header)
 		should_allow = set(['POST', 'HEAD', 'RPC', 'OPTIONS', 'GET'])
