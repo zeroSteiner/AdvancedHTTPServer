@@ -999,6 +999,11 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			self.wfile = self._wfile
 		super(RequestHandler, self).send_response(*args, **kwargs)
 		self.headers_active = True
+		if self.headers.get('Connection', None) == 'keep-alive' and self.protocol_version.upper() == 'HTTP/1.1':
+			connection = 'keep-alive'
+		else:
+			connection = 'close'
+		self.send_header('Connection', connection)
 
 	def end_headers(self):
 		super(RequestHandler, self).end_headers()
@@ -1507,6 +1512,9 @@ class AdvancedHTTPServer(object):
 			self.logger = logging.getLogger('AdvancedHTTPServer')
 		self.__should_stop = threading.Event()
 		self.__is_shutdown = threading.Event()
+		self.__is_shutdown.set()
+		self.__is_running = threading.Event()
+		self.__is_running.clear()
 		self.__server_thread = None
 
 		self.config = {
@@ -1601,18 +1609,22 @@ class AdvancedHTTPServer(object):
 		self.__server_thread = threading.current_thread()
 		self.__is_shutdown.clear()
 		self.__should_stop.clear()
+		self.__is_running.set()
 		while not self.__should_stop.is_set():
 			read_ready, _, _ = select.select(self._servers, [], [], 0)
 			for server in read_ready:
 				server.handle_request()
 		self.__is_shutdown.set()
+		self.__is_running.clear()
 		return 0
 
 	def shutdown(self):
 		"""Shutdown the server and stop responding to requests."""
+		self.__is_running.wait()
 		self.__should_stop.set()
 		if self.__server_thread == threading.current_thread():
 			self.__is_shutdown.set()
+			self.__is_running.clear()
 		else:
 			self.__is_shutdown.wait()
 		for server in self._servers:
@@ -1831,7 +1843,7 @@ class ServerTestCase(unittest.TestCase):
 		"""
 		self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
 		headers = (headers or {})
-		headers['Connection'] = 'close'
+		headers['Connection'] = 'close' #keep-alive'
 		self.http_connection.request(method, resource, headers=headers)
 		time.sleep(0.025)
 		response = self.http_connection.getresponse()
