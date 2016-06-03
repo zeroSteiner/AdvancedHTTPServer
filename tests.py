@@ -37,18 +37,29 @@ import logging
 import os
 import random
 import ssl
+import sys
 import time
 import unittest
 
+from advancedhttpserver import AdvancedHTTPServer
 from advancedhttpserver import RegisterPath
 from advancedhttpserver import RPCClient
 from advancedhttpserver import RPCClientCached
 from advancedhttpserver import RPCError
 from advancedhttpserver import Serializer
 from advancedhttpserver import ServerTestCase
+from advancedhttpserver import build_server_from_config
 from advancedhttpserver import has_msgpack
 from advancedhttpserver import random_string
 from advancedhttpserver import resolve_ssl_protocol_version
+
+if sys.version_info[0] < 3:
+	import httplib
+	http = type('http', (), {'client': httplib})
+	from ConfigParser import ConfigParser
+else:
+	import http.client
+	from configparser import ConfigParser
 
 if hasattr(logging, 'NullHandler'):
 	null_handler = logging.NullHandler()
@@ -56,7 +67,12 @@ else:
 	null_handler = logging.StreamHandler(open(os.devnull, 'w'))
 logging.getLogger('AdvancedHTTPServer').addHandler(null_handler)
 
-class ServerTests(ServerTestCase):
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+test_certfile = os.path.join(os.path.dirname(__file__), 'advancedhttpserver.pem')
+
+class ServerHTTPTests(ServerTestCase):
 	def _test_authentication(self, username, password):
 		response = self.http_request(self.test_resource, 'GET')
 		self.assertHTTPStatus(response, 401)
@@ -99,9 +115,9 @@ class ServerTests(ServerTestCase):
 		RegisterPath("/{0}".format(self.rpc_test_double), self.handler_class.__name__, is_rpc=True)(self._rpc_test_double_handler)
 		RegisterPath("/{0}".format(self.rpc_test_datetime), self.handler_class.__name__, is_rpc=True)(self._rpc_test_datetime_handler)
 		RegisterPath("/{0}".format(self.rpc_test_throw_exception), self.handler_class.__name__, is_rpc=True)(self._rpc_test_throw_exception)
-		super(ServerTests, self).setUp()
+		super(ServerHTTPTests, self).setUp()
 
-	def build_rpc_client(self, username=None, password=None, cached=False):
+	def build_rpc_client(self, username=None, password=None, cached=False, use_ssl=False):
 		if cached:
 			klass = RPCClientCached
 		else:
@@ -110,7 +126,8 @@ class ServerTests(ServerTestCase):
 			self.server_address,
 			username=username,
 			password=password,
-			use_ssl=self.config.has_option(self.config_section, 'ssl_cert')
+			use_ssl=use_ssl,
+			ssl_context=ssl_context
 		)
 		return rpc_client
 
@@ -261,6 +278,59 @@ class ServerTests(ServerTestCase):
 		self.assertEqual(doubled, number * 2)
 		with self.assertRaisesRegex(RPCError, '^a remote exception occurred$'):
 			rpc(self.rpc_test_throw_exception)
+
+class ServerHTTPSTests(ServerHTTPTests):
+	def __init__(self, *args, **kwargs):
+		super(ServerHTTPSTests, self).__init__(*args, **kwargs)
+		self._server_kwargs['ssl_certfile'] = test_certfile
+		self.server_address = (self.server_address[0], self.server_address[1], True)
+
+	def build_rpc_client(self, *args, **kwargs):
+		kwargs['use_ssl'] = True
+		return super(ServerHTTPSTests, self).build_rpc_client(*args, **kwargs)
+
+class ServerBindHTTPTests(ServerTestCase):
+	def __init__(self, *args, **kwargs):
+		super(ServerBindHTTPTests, self).__init__(*args, **kwargs)
+		self.addresses = (
+			('127.0.0.1', random.randint(30000, 50000)),
+			('127.0.0.1', random.randint(30000, 50000), False)
+		)
+		self.server_address = self.addresses[0]
+		self._server_kwargs = {
+			'addresses': self.addresses
+		}
+
+	def test_bind_multiple_ports(self):
+		for address in self.addresses:
+			self.http_connection.close()
+			if len(address) == 3 and address[2]:
+				self.http_connection = http.client.HTTPSConnection(address[0], address[1], context=ssl_context)
+			else:
+				self.http_connection = http.client.HTTPConnection(address[0], address[1])
+			resp = self.http_request('/')
+			self.assertHTTPStatus(resp, 404)
+
+class ServerBindMixTests(ServerBindHTTPTests):
+	def __init__(self, *args, **kwargs):
+		super(ServerBindMixTests, self).__init__(*args, **kwargs)
+		self.addresses = (
+			('127.0.0.1', random.randint(30000, 50000), True),  # https
+			('127.0.0.1', random.randint(30000, 50000), False)  # http
+		)
+		self.server_address = self.addresses[0]
+		self._server_kwargs['addresses'] = self.addresses
+		self._server_kwargs['ssl_certfile'] = test_certfile
+
+class ServerBuildTests(unittest.TestCase):
+	def test_build_from_config(self):
+		config_section = random_string(8)
+		config = ConfigParser()
+		config.add_section(config_section)
+		config.set(config_section, 'ip', '127.0.0.1')
+		config.set(config_section, 'port', str(random.randint(30000, 50000)))
+		server = build_server_from_config(config, config_section)
+		self.assertIsInstance(server, AdvancedHTTPServer)
 
 if __name__ == '__main__':
 	unittest.main()

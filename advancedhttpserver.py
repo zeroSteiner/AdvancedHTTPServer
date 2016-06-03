@@ -1776,25 +1776,17 @@ class ServerTestCase(unittest.TestCase):
 	"""The :py:class:`.AdvancedHTTPServer` class to use as the server, this can be overridden by subclasses."""
 	handler_class = RequestHandler
 	"""The :py:class:`.RequestHandler` class to use as the request handler, this can be overridden by subclasses."""
-	config_section = 'server'
-	"""The name of the :py:class:`configparser.ConfigParser` section that the server is using."""
 	def __init__(self, *args, **kwargs):
 		super(ServerTestCase, self).__init__(*args, **kwargs)
-		config = ConfigParser()
-		config.add_section(self.config_section)
-		config.set(self.config_section, 'ip', '127.0.0.1')
-		config.set(self.config_section, 'port', str(random.randint(30000, 50000)))
-		self.config = config
-		"""
-		The :py:class:`configparser.ConfigParser` object used by the server.
-		It has the ip and port options configured in the section named in
-		the :py:attr:`.config_section` attribute.
-		"""
 		self.test_resource = "/{0}".format(random_string(40))
 		"""
 		A resource which has a handler set to it which will respond with
 		a 200 status code and the message 'Hello World!'
 		"""
+		self.server_address = ('localhost', random.randint(30000, 50000))
+		self._server_kwargs = {
+			'address': self.server_address
+		}
 		if hasattr(self, 'assertRegexpMatches') and not hasattr(self, 'assertRegexMatches'):
 			self.assertRegexMatches = self.assertRegexpMatches
 		if hasattr(self, 'assertRaisesRegexp') and not hasattr(self, 'assertRaisesRegex'):
@@ -1802,28 +1794,25 @@ class ServerTestCase(unittest.TestCase):
 
 	def setUp(self):
 		RegisterPath("^{0}$".format(self.test_resource[1:]), self.handler_class.__name__)(self._test_resource_handler)
-		self.server = build_server_from_config(self.config, self.config_section, self.server_class, self.handler_class)
+		self.server = self.server_class(self.handler_class, **self._server_kwargs)
 		self.assertTrue(isinstance(self.server, AdvancedHTTPServer))
 		self.server_thread = threading.Thread(target=self.server.serve_forever)
 		self.server_thread.daemon = True
 		self.server_thread.start()
 		self.assertTrue(self.server_thread.is_alive())
 		self.shutdown_requested = False
-		self.server_address = (self.config.get(self.config_section, 'ip'), self.config.getint(self.config_section, 'port'))
-		if self.config.has_option(self.config_section, 'ssl_cert'):
-			self.http_connection = http.client.HTTPSConnection(self.server_address[0], self.server_address[1])
+		if len(self.server_address) == 3 and self.server_address[2]:
+			context = ssl.create_default_context()
+			context.check_hostname = False
+			context.verify_mode = ssl.CERT_NONE
+			self.http_connection = http.client.HTTPSConnection(self.server_address[0], self.server_address[1], context=context)
 		else:
 			self.http_connection = http.client.HTTPConnection(self.server_address[0], self.server_address[1])
 		self.http_connection.connect()
 
 	def _test_resource_handler(self, handler, query):
 		del query
-		message = b'Hello World!\n'
-		handler.send_response(200)
-		handler.send_header('Content-Type', 'text/html; charset=utf-8')
-		handler.send_header('Content-Length', len(message))
-		handler.end_headers()
-		handler.wfile.write(message)
+		handler.send_response_full(b'Hello World!\n')
 		return
 
 	def assertHTTPStatus(self, http_response, status):
