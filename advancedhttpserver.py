@@ -1278,6 +1278,14 @@ class WebSocketHandler(object):
 	_opcode_close = 0x08
 	_opcode_ping = 0x09
 	_opcode_pong = 0x0a
+	_opcode_names = {
+		_opcode_continue: 'continue',
+		_opcode_text: 'text',
+		_opcode_binary: 'binary',
+		_opcode_close: 'close',
+		_opcode_ping: 'ping',
+		_opcode_pong: 'pong'
+	}
 	guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 	def __init__(self, handler):
 		self.handler = handler
@@ -1314,6 +1322,9 @@ class WebSocketHandler(object):
 			self.close()
 			return
 		byte_0 = ord(byte_0)
+		if byte_0 & 0x70:
+			self.close()
+			return
 		fin = bool(byte_0 & 0x80)
 		opcode = byte_0 & 0x0f
 		length = ord(self.handler.rfile.read(1)) & 0x7f
@@ -1332,11 +1343,29 @@ class WebSocketHandler(object):
 				decoded += struct.pack('B', char ^ masks[len(decoded) % 4])
 		self.logger.debug("received message (len: {0:,} opcode: 0x{1:02x} fin: {2})".format(len(decoded), opcode, fin))
 		if fin:
-			self.on_message(opcode or self._last_opcode, self._last_buffer + decoded)
+			if opcode == self._opcode_continue:
+				opcode = self._last_opcode
+				decoded = self._last_buffer + decoded
+				self._last_buffer = b''
+				self._last_opcode = 0
+			elif self._last_buffer and opcode in (self._opcode_binary, self._opcode_text):
+				self.logger.warning('closing connection due to unflushed buffer in new data frame')
+				self.close()
+				return
+			self.on_message(opcode, decoded)
+			return
+
+		if opcode > 0x02:
+			self.logger.warning('closing connection due to fin flag not set on opcode > 0x02')
+			self.close()
 			return
 		if opcode:
-			self._last_opcode = opcode
+			if self._last_buffer:
+				self.logger.warning('closing connection due to unflushed buffer in new continuation frame')
+				self.close()
+				return
 			self._last_buffer = decoded
+			self._last_opcode = opcode
 		else:
 			self._last_buffer += decoded
 
@@ -1377,11 +1406,11 @@ class WebSocketHandler(object):
 		pass
 
 	def on_message(self, opcode, message):
-		# close
+		self.logger.debug("processing {0} (opcode: 0x{1:02x}) message".format(self._opcode_names.get(opcode, 'UNKNOWN'), opcode))
 		if opcode == self._opcode_close:
 			self.close()
 		elif opcode == self._opcode_ping:
-			self.send_message(self._opcode_pong, message)
+			self.on_message_ping(message)
 		elif opcode == self._opcode_pong:
 			pass
 		elif opcode == self._opcode_binary:
@@ -1389,10 +1418,19 @@ class WebSocketHandler(object):
 		elif opcode == self._opcode_text:
 			self.on_message_text(message.decode('utf-8'))
 		elif opcode == self._opcode_continue:
-			pass
+			self.close()
+		else:
+			self.logger.warning("received unknown opcode: {0} (0x{0:02x})".format(opcode))
+			self.close()
 
 	def on_message_binary(self, message):
 		pass
+
+	def on_message_ping(self, message):
+		if len(message) > 125:
+			self.close()
+			return
+		self.send_message(self._opcode_pong, message)
 
 	def on_message_text(self, message):
 		pass
@@ -1528,7 +1566,7 @@ class AdvancedHTTPServer(object):
 			'serve_files_list_directories': True, # irrelevant if serve_files == False
 			'serve_files_root': os.getcwd(),
 			'serve_robots_txt': True,
-			'server_version': 'HTTPServer/' + __version__
+			'server_version': 'AdvancedHTTPServer/' + __version__
 		}
 
 		self._servers = []
