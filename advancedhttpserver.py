@@ -1299,6 +1299,7 @@ class WebSocketHandler(object):
 		handler.send_header('Connection', 'Upgrade')
 		handler.send_header('Sec-WebSocket-Accept', base64.b64encode(digest).decode('utf-8'))
 		handler.end_headers()
+		handler.wfile.flush()
 		self.lock = threading.Lock()
 
 		self.connected = True
@@ -1307,6 +1308,7 @@ class WebSocketHandler(object):
 
 		self._last_buffer = b''
 		self._last_opcode = 0
+		self._last_sent_opcode = 0
 
 		while self.connected:
 			try:
@@ -1314,9 +1316,9 @@ class WebSocketHandler(object):
 			except Exception:
 				self.logger.error('there was an error processing messages', exc_info=True)
 				self.close()
+		self.handler.close_connection = 1
 
 	def _process_message(self):
-		select.select([self.handler.rfile], [], [])
 		byte_0 = self.handler.rfile.read(1)
 		if not byte_0:
 			self.close()
@@ -1372,32 +1374,39 @@ class WebSocketHandler(object):
 	def close(self):
 		if not self.connected:
 			return
-		with self.lock:
-			self.handler.close_connection = 1
-			if select.select([], [self.handler.wfile], [], 0)[1]:
+		if select.select([], [self.handler.wfile], [], 0)[1]:
+			with self.lock:
 				self.handler.wfile.write(b'\x88\x00')
-			self.connected = False
+		self.handler.wfile.flush()
+		self.connected = False
 		self.on_closed()
 
 	def send_message(self, opcode, message):
+		if not isinstance(message, bytes):
+			message = message.encode('utf-8')
 		length = len(message)
 		if not select.select([], [self.handler.wfile], [], 0)[1]:
 			self.close()
 			return
+		buffer = b''
+		buffer += struct.pack('B', 0x80 + opcode)
+		if length <= 125:
+			buffer += struct.pack('B', length)
+		elif 126 <= length <= 65535:
+			buffer += struct.pack('>BH', 126, length)
+		else:
+			buffer += struct.pack('>BQ', 127, length)
+		buffer += message
+		self._last_sent_opcode = opcode
+		self.lock.acquire()
 		try:
-			self.handler.wfile.write(chr(0x80 + opcode))
-			if length <= 125:
-				self.handler.wfile.write(chr(length))
-			elif 126 <= length <= 65535:
-				self.handler.wfile.write(chr(126))
-				self.handler.wfile.write(struct.pack('>H', length))
-			else:
-				self.handler.wfile.write(chr(127))
-				self.handler.wfile.write(struct.pack('>Q', length))
-			if length > 0:
-				self.handler.wfile.write(message)
+			self.handler.wfile.write(buffer)
+			self.handler.wfile.flush()
 		except Exception:
+			self.logger.error('an error occurred while sending a message', exc_info=True)
 			self.close()
+		finally:
+			self.lock.release()
 
 	def on_closed(self):
 		pass
@@ -1412,7 +1421,7 @@ class WebSocketHandler(object):
 		elif opcode == self._opcode_ping:
 			self.on_message_ping(message)
 		elif opcode == self._opcode_pong:
-			pass
+			self.on_message_pong(message)
 		elif opcode == self._opcode_binary:
 			self.on_message_binary(message)
 		elif opcode == self._opcode_text:
@@ -1431,6 +1440,9 @@ class WebSocketHandler(object):
 			self.close()
 			return
 		self.send_message(self._opcode_pong, message)
+
+	def on_message_pong(self, message):
+		pass
 
 	def on_message_text(self, message):
 		pass
