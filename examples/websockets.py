@@ -30,8 +30,6 @@
 #  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-import logging
-
 from advancedhttpserver import *
 from advancedhttpserver import __version__
 
@@ -40,21 +38,18 @@ class DemoWebSocketHandler(WebSocketHandler):
 		self.send_message(self._opcode_binary, message)
 
 	def on_message_text(self, message):
-		print(message)
+		if len(message) > 64:
+			print(message[:61] + '...')
+		else:
+			print(message)
 		self.send_message(self._opcode_text, message)
 
 class DemoHandler(RequestHandler):
 	web_socket_handler = DemoWebSocketHandler
 
 def main():
+	server = build_server_from_argparser(handler_klass=DemoHandler)
 	print("AdvancedHTTPServer version: {0}".format(__version__))
-	logging.getLogger('').setLevel(logging.DEBUG)
-	console_log_handler = logging.StreamHandler()
-	console_log_handler.setLevel(logging.DEBUG)
-	console_log_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)-8s %(message)s"))
-	logging.getLogger('').addHandler(console_log_handler)
-
-	server = AdvancedHTTPServer(DemoHandler, address=('', 9001))
 	server.server_version = 'AdvancedHTTPServerDemo'
 	try:
 		server.serve_forever()

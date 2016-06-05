@@ -58,6 +58,9 @@ Classes
 .. autoclass:: ServerTestCase
    :members:
 
+.. autoclass:: WebSocketHandler
+   :members:
+
 Exceptions
 ----------
 

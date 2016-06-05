@@ -1272,6 +1272,9 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		return encoding
 
 class WebSocketHandler(object):
+	"""
+	A handler for web socket connections.
+	"""
 	_opcode_continue = 0x00
 	_opcode_text = 0x01
 	_opcode_binary = 0x02
@@ -1288,10 +1291,15 @@ class WebSocketHandler(object):
 	}
 	guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
 	def __init__(self, handler):
+		"""
+		:param handler: The :py:class:`RequestHandler` instance that is handling the request.
+		"""
 		self.handler = handler
 		if not hasattr(self, 'logger'):
 			self.logger = logging.getLogger('AdvancedHTTPServer.WebSocketHandler')
 		headers = self.handler.headers
+		client_extensions = headers.get('Sec-WebSocket-Extensions', '')
+		self.client_extensions = [extension.strip() for extension in client_extensions.split(',')]
 		key = headers.get('Sec-WebSocket-Key', None)
 		digest = hashlib.sha1((key + self.guid).encode('utf-8')).digest()
 		handler.send_response(101, 'Switching Protocols')
@@ -1318,6 +1326,15 @@ class WebSocketHandler(object):
 				self.close()
 		self.handler.close_connection = 1
 
+	def _decode_string(self, data):
+		str = data.decode('utf-8')
+		if sys.version_info[0] == 3:
+			return str
+		for idx, ch in enumerate(str):
+			if 0xD800 <= ord(ch) <= 0xDFFF:
+				raise UnicodeDecodeError('utf-8', '', idx, idx, 'surrogate character detected')
+		return str
+
 	def _process_message(self):
 		byte_0 = self.handler.rfile.read(1)
 		if not byte_0:
@@ -1337,24 +1354,23 @@ class WebSocketHandler(object):
 		masks = [b for b in self.handler.rfile.read(4)]
 		if sys.version_info[0] < 3:
 			masks = map(ord, masks)
-		decoded = b''
-		for char in self.handler.rfile.read(length):
-			if sys.version_info[0] < 3:
-				decoded += chr(ord(char) ^ masks[len(decoded) % 4])
-			else:
-				decoded += struct.pack('B', char ^ masks[len(decoded) % 4])
-		self.logger.debug("received message (len: {0:,} opcode: 0x{1:02x} fin: {2})".format(len(decoded), opcode, fin))
+
+		payload = bytearray(self.handler.rfile.read(length))
+		for idx, char in enumerate(payload):
+			payload[idx] = char ^ masks[idx % 4]
+		payload = bytes(payload)
+		self.logger.debug("received message (len: {0:,} opcode: 0x{1:02x} fin: {2})".format(len(payload), opcode, fin))
 		if fin:
 			if opcode == self._opcode_continue:
 				opcode = self._last_opcode
-				decoded = self._last_buffer + decoded
+				payload = self._last_buffer + payload
 				self._last_buffer = b''
 				self._last_opcode = 0
 			elif self._last_buffer and opcode in (self._opcode_binary, self._opcode_text):
 				self.logger.warning('closing connection due to unflushed buffer in new data frame')
 				self.close()
 				return
-			self.on_message(opcode, decoded)
+			self.on_message(opcode, payload)
 			return
 
 		if opcode > 0x02:
@@ -1366,12 +1382,17 @@ class WebSocketHandler(object):
 				self.logger.warning('closing connection due to unflushed buffer in new continuation frame')
 				self.close()
 				return
-			self._last_buffer = decoded
+			self._last_buffer = payload
 			self._last_opcode = opcode
 		else:
-			self._last_buffer += decoded
+			self._last_buffer += payload
 
 	def close(self):
+		"""
+		Close the web socket connection and stop processing results. If the
+		connection is still open, a WebSocket close message will be sent to the
+		peer.
+		"""
 		if not self.connected:
 			return
 		if select.select([], [self.handler.wfile], [], 0)[1]:
@@ -1382,6 +1403,12 @@ class WebSocketHandler(object):
 		self.on_closed()
 
 	def send_message(self, opcode, message):
+		"""
+		Send a message to the peer over the socket.
+
+		:param int opcode: The opcode for the message to send.
+		:param bytes message: The message data to send.
+		"""
 		if not isinstance(message, bytes):
 			message = message.encode('utf-8')
 		length = len(message)
@@ -1409,23 +1436,46 @@ class WebSocketHandler(object):
 			self.lock.release()
 
 	def on_closed(self):
+		"""
+		A method that can be over ridden and is called after the web socket is
+		closed.
+		"""
 		pass
 
 	def on_connected(self):
+		"""
+		A method that can be over ridden and is called after the web socket is
+		connected.
+		"""
 		pass
 
 	def on_message(self, opcode, message):
+		"""
+		The primary dispatch function to handle incoming WebSocket messages.
+
+		:param int opcode: The opcode of the message that was received.
+		:param bytes message: The data contained within the message.
+		"""
 		self.logger.debug("processing {0} (opcode: 0x{1:02x}) message".format(self._opcode_names.get(opcode, 'UNKNOWN'), opcode))
 		if opcode == self._opcode_close:
 			self.close()
 		elif opcode == self._opcode_ping:
-			self.on_message_ping(message)
+			if len(message) > 125:
+				self.close()
+				return
+			self.send_message(self._opcode_pong, message)
 		elif opcode == self._opcode_pong:
-			self.on_message_pong(message)
+			pass
 		elif opcode == self._opcode_binary:
 			self.on_message_binary(message)
 		elif opcode == self._opcode_text:
-			self.on_message_text(message.decode('utf-8'))
+			try:
+				message = self._decode_string(message)
+			except UnicodeDecodeError:
+				self.logger.warning('closing connection due to invalid unicode within a text message')
+				self.close()
+			else:
+				self.on_message_text(message)
 		elif opcode == self._opcode_continue:
 			self.close()
 		else:
@@ -1433,18 +1483,21 @@ class WebSocketHandler(object):
 			self.close()
 
 	def on_message_binary(self, message):
-		pass
+		"""
+		A method that can be over ridden and is called when a binary message is
+		received from the peer.
 
-	def on_message_ping(self, message):
-		if len(message) > 125:
-			self.close()
-			return
-		self.send_message(self._opcode_pong, message)
-
-	def on_message_pong(self, message):
+		:param bytes message: The message data.
+		"""
 		pass
 
 	def on_message_text(self, message):
+		"""
+		A method that can be over ridden and is called when a text message is
+		received from the peer.
+
+		:param str message: The message data.
+		"""
 		pass
 
 class Serializer(object):
