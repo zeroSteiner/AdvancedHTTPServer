@@ -43,11 +43,13 @@ import unittest
 
 from advancedhttpserver import AdvancedHTTPServer
 from advancedhttpserver import RegisterPath
+from advancedhttpserver import RequestHandler
 from advancedhttpserver import RPCClient
 from advancedhttpserver import RPCClientCached
 from advancedhttpserver import RPCError
 from advancedhttpserver import Serializer
 from advancedhttpserver import ServerTestCase
+from advancedhttpserver import WebSocketHandler
 from advancedhttpserver import build_server_from_config
 from advancedhttpserver import has_msgpack
 from advancedhttpserver import random_string
@@ -61,6 +63,13 @@ else:
 	import http.client
 	from configparser import ConfigParser
 
+try:
+	import websocket
+except ImportError:
+	has_websocket = False
+else:
+	has_websocket = True
+
 if hasattr(logging, 'NullHandler'):
 	null_handler = logging.NullHandler()
 else:
@@ -71,6 +80,22 @@ ssl_context = ssl.create_default_context()
 ssl_context.check_hostname = False
 ssl_context.verify_mode = ssl.CERT_NONE
 test_certfile = os.path.join(os.path.dirname(__file__), 'advancedhttpserver.pem')
+
+def random_binary(size):
+	binary_data = bytearray()
+	for _ in range(0, size):
+		binary_data.append(random.randint(0, 0xff))
+	return bytes(binary_data)
+
+class EchoWebSocketHandler(WebSocketHandler):
+	def on_message_binary(self, message):
+		self.send_message(self._opcode_binary, message)
+
+	def on_message_text(self, message):
+		self.send_message(self._opcode_text, message)
+
+class EchoWebSocketRequestHandler(RequestHandler):
+	web_socket_handler = EchoWebSocketHandler
 
 class ServerHTTPTests(ServerTestCase):
 	def _test_authentication(self, username, password):
@@ -201,7 +226,7 @@ class ServerHTTPTests(ServerTestCase):
 		rpc = self.build_rpc_client()
 		self.run_rpc_tests(rpc)
 
-	@unittest.skipUnless(has_msgpack, 'this test requires msgpack')
+	@unittest.skipUnless(has_msgpack, 'this test requires the msgpack package')
 	def test_rpc_msgpack(self):
 		rpc = self.build_rpc_client()
 		rpc.set_serializer('binary/message-pack')
@@ -241,7 +266,7 @@ class ServerHTTPTests(ServerTestCase):
 		serializer = Serializer('application/json')
 		self._test_serializer_hooks(serializer)
 
-	@unittest.skipUnless(has_msgpack, 'this test requires msgpack')
+	@unittest.skipUnless(has_msgpack, 'this test requires the msgpack package')
 	def test_serializer_msgpack(self):
 		serializer = Serializer('binary/message-pack')
 		self._test_serializer_hooks(serializer)
@@ -331,6 +356,81 @@ class ServerBuildTests(unittest.TestCase):
 		config.set(config_section, 'port', str(random.randint(30000, 50000)))
 		server = build_server_from_config(config, config_section)
 		self.assertIsInstance(server, AdvancedHTTPServer)
+
+class WebSocketHTTPTests(ServerTestCase):
+	handler_class = EchoWebSocketRequestHandler
+	def _get_ws(self):
+		self._ws = websocket.WebSocket()
+		self._ws.connect("ws://{0}:{1}/".format(*self.server_address))
+		return self._ws
+
+	def tearDown(self, *args, **kwargs):
+		super(WebSocketHTTPTests, self).tearDown(*args, **kwargs)
+		ws = getattr(self, '_ws', None)
+		if ws is not None and ws.connected:
+			ws.close()
+
+	@unittest.skipUnless(has_websocket, 'this test requires the websocket-client package')
+	def test_send_message_binary(self):
+		ws = self._get_ws()
+		test_bytes = random_binary(32)
+		ws.send(test_bytes, websocket.ABNF.OPCODE_BINARY)
+		resp = ws.recv()
+		self.assertIsInstance(resp, bytes)
+		self.assertEqual(test_bytes, resp)
+		return
+
+	@unittest.skipUnless(has_websocket, 'this test requires the websocket-client package')
+	def test_send_message_text(self):
+		ws = self._get_ws()
+		test_string = random_string(32)
+		ws.send(test_string, websocket.ABNF.OPCODE_TEXT)
+		resp = ws.recv()
+		self.assertIsInstance(resp, str)
+		self.assertEqual(test_string, resp)
+		return
+
+	@unittest.skipUnless(has_websocket, 'this test requires the websocket-client package')
+	def test_send_ping_without_fin(self):
+		ws = self._get_ws()
+		ws.send_frame(websocket.ABNF.create_frame(b'ping', websocket.ABNF.OPCODE_PING, 0))
+		ws.recv()
+		self.assertFalse(ws.connected)
+
+	@unittest.skipUnless(has_websocket, 'this test requires the websocket-client package')
+	def test_send_without_cont(self):
+		ws = self._get_ws()
+		ws.send_frame(websocket.ABNF.create_frame(random_string(10), websocket.ABNF.OPCODE_TEXT, 0))
+		ws.send_frame(websocket.ABNF.create_frame(random_string(10), websocket.ABNF.OPCODE_TEXT, 0))
+		ws.recv()
+		self.assertFalse(ws.connected)
+
+	@unittest.skipUnless(has_websocket, 'this test requires the websocket-client package')
+	def test_binary_fragmentation(self):
+		ws = self._get_ws()
+		data = random_binary(32)
+		ws.send_frame(websocket.ABNF.create_frame(data[:16], websocket.ABNF.OPCODE_BINARY, 0))
+		ws.send_frame(websocket.ABNF.create_frame(data[16:], websocket.ABNF.OPCODE_CONT, 1))
+		self.assertEqual(ws.recv(), data)
+
+	@unittest.skipUnless(has_websocket, 'this test requires the websocket-client package')
+	def test_text_fragmentation(self):
+		ws = self._get_ws()
+		string = random_string(32)
+		ws.send_frame(websocket.ABNF.create_frame(string[:16], websocket.ABNF.OPCODE_TEXT, 0))
+		ws.send_frame(websocket.ABNF.create_frame(string[16:], websocket.ABNF.OPCODE_CONT, 1))
+		self.assertEqual(ws.recv(), string)
+
+class WebSocketHTTPSTests(WebSocketHTTPTests):
+	def __init__(self, *args, **kwargs):
+		super(WebSocketHTTPSTests, self).__init__(*args, **kwargs)
+		self._server_kwargs['ssl_certfile'] = test_certfile
+		self.server_address = (self.server_address[0], self.server_address[1], True)
+
+	def _get_ws(self):
+		self._ws = websocket.WebSocket(sslopt={'cert_reqs': ssl.CERT_NONE})
+		self._ws.connect("wss://{0}:{1}/".format(*self.server_address))
+		return self._ws
 
 if __name__ == '__main__':
 	unittest.main()
