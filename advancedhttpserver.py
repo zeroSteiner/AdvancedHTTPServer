@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.0b2'
+__version__ = '2.0.0b3'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -713,6 +713,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 	"""The dict object which maps regular expressions of resources to the functions which should handle them."""
 	rpc_handler_map = {}
 	"""The dict object which maps regular expressions of RPC functions to their handlers."""
+	wbufsize = 4096
 	web_socket_handler = None
 	"""An optional class to handle Web Sockets. This class must be derived from :py:class:`.WebSocketHandler`."""
 	def __init__(self, *args, **kwargs):
@@ -1012,6 +1013,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		super(RequestHandler, self).end_headers()
 		self.headers_active = False
 		if self.command == 'HEAD':
+			self.wfile.flush()
 			self.wfile = open(os.devnull, 'wb')
 
 	def guess_mime_type(self, path):
@@ -1330,9 +1332,10 @@ class WebSocketHandler(object):
 		str = data.decode('utf-8')
 		if sys.version_info[0] == 3:
 			return str
+		# raise an exception on surrogates in python 2.7 to more closely replicate 3.x behaviour
 		for idx, ch in enumerate(str):
 			if 0xD800 <= ord(ch) <= 0xDFFF:
-				raise UnicodeDecodeError('utf-8', '', idx, idx, 'surrogate character detected')
+				raise UnicodeDecodeError('utf-8', '', idx, idx + 1, 'invalid continuation byte')
 		return str
 
 	def _process_message(self):
