@@ -359,6 +359,10 @@ class ServerBuildTests(unittest.TestCase):
 
 class WebSocketHTTPTests(ServerTestCase):
 	handler_class = EchoWebSocketRequestHandler
+	def __init__(self, *args, **kwargs):
+		super(WebSocketHTTPTests, self).__init__(*args, **kwargs)
+		self._ws = None
+
 	def _get_ws(self):
 		self._ws = websocket.WebSocket()
 		self._ws.connect("ws://{0}:{1}/".format(*self.server_address))

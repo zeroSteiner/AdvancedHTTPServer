@@ -37,7 +37,7 @@ AdvancedHTTPServer uses Sphinx for internal code documentation. This
 documentation can be generated from source with the command
 ```sphinx-build docs/source docs/html```. The latest documentation is
 kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
-[advancedhttpserver.readthedocs.org](https://advancedhttpserver.readthedocs.org/en/latest/).
+[advancedhttpserver.readthedocs.io](https://advancedhttpserver.readthedocs.io/en/latest/).
 
 ## Changes In Version 2.0
  - The `AdvancedHTTPServer` module has been renamed `advancedhttpserver`

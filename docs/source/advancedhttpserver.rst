@@ -55,8 +55,15 @@ Classes
    :special-members: __init__
    :undoc-members:
 
+.. autoclass:: ServerNonThreaded
+   :members:
+
 .. autoclass:: ServerTestCase
    :members:
+
+.. autoclass:: ServerThreaded
+   :members:
+
 
 .. autoclass:: WebSocketHandler
    :members:

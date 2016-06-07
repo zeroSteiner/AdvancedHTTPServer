@@ -651,15 +651,19 @@ class RPCClientCached(RPCClient):
 class ServerNonThreaded(http.server.HTTPServer, object):
 	"""
 	This class is used internally by :py:class:`.AdvancedHTTPServer` and
-	is not intended for use by other classes or functions.
+	is not intended for use by other classes or functions. It is responsible for
+	listening on a single address, TCP port and SSL combination.
 	"""
 	def __init__(self, *args, **kwargs):
-		self.config = kwargs.pop('config')
+		self.__config = kwargs.pop('config')
 		if not hasattr(self, 'logger'):
 			self.logger = logging.getLogger('AdvancedHTTPServer')
 		self.allow_reuse_address = True
 		self.using_ssl = False
 		super(ServerNonThreaded, self).__init__(*args, **kwargs)
+
+	def get_config(self):
+		return self.__config
 
 	def finish_request(self, *args, **kwargs):
 		try:
@@ -681,7 +685,8 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 class ServerThreaded(socketserver.ThreadingMixIn, ServerNonThreaded):
 	"""
 	This class is used internally by :py:class:`.AdvancedHTTPServer` and
-	is not intended for use by other classes or functions.
+	is not intended for use by other classes or functions. It is responsible for
+	listening on a single address, TCP port and SSL combination.
 	"""
 	pass
 
@@ -739,7 +744,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		"""The parameter data that has been passed to the server parsed as a dict."""
 		self.raw_query_data = None
 		"""The raw data that was parsed into the :py:attr:`.query_data` attribute."""
-		self.config = self.server.config
+		self.__config = self.server.get_config()
 		"""A reference to the configuration provided by the server."""
 		self.on_init()
 		super(RequestHandler, self).__init__(*args, **kwargs)
@@ -775,7 +780,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		return (handler, is_method)
 
 	def version_string(self):
-		return self.config['server_version']
+		return self.__config['server_version']
 
 	def respond_file(self, file_path, attachment=False, query=None):
 		"""
@@ -818,7 +823,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		except os.error:
 			self.respond_not_found()
 			return None
-		if os.path.normpath(dir_path) != self.config['serve_files_root']:
+		if os.path.normpath(dir_path) != self.__config['serve_files_root']:
 			dir_contents.append('..')
 		dir_contents.sort(key=lambda a: a.lower())
 		displaypath = html.escape(urllib.parse.unquote(self.path), quote=True)
@@ -913,7 +918,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		"""
 		headers = {}
 		if request_authentication:
-			headers['WWW-Authenticate'] = 'Basic realm="' + self.config['server_version'] + '"'
+			headers['WWW-Authenticate'] = 'Basic realm="' + self.__config['server_version'] + '"'
 		self.send_response_full(b'Unauthorized', status=401, headers=headers)
 		return
 
@@ -945,8 +950,8 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			tmp_path = os.path.join(tmp_path, word)
 		self.path = tmp_path
 
-		if self.path == 'robots.txt' and self.config['serve_robots_txt']:
-			self.send_response_full(self.config['robots_txt'])
+		if self.path == 'robots.txt' and self.__config['serve_robots_txt']:
+			self.send_response_full(self.__config['robots_txt'])
 			return
 
 		self.cookies = http.cookies.SimpleCookie(self.headers.get('cookie', ''))
@@ -958,11 +963,11 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 				self.respond_server_error()
 			return
 
-		if not self.config['serve_files']:
+		if not self.__config['serve_files']:
 			self.respond_not_found()
 			return
 
-		file_path = self.config['serve_files_root']
+		file_path = self.__config['serve_files_root']
 		file_path = os.path.join(file_path, tmp_path)
 		if os.path.isfile(file_path) and os.access(file_path, os.R_OK):
 			self.respond_file(file_path, query=query)
@@ -980,7 +985,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 				if os.path.isfile(index) and os.access(index, os.R_OK):
 					self.respond_file(index, query=query)
 					return
-			if self.config['serve_files_list_directories']:
+			if self.__config['serve_files_list_directories']:
 				self.respond_list_directory(file_path, query=query)
 				return
 		self.respond_not_found()
@@ -1055,7 +1060,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		:rtype: bool
 		"""
 		try:
-			store = self.config.get('basic_auth')
+			store = self.__config.get('basic_auth')
 			if store is None:
 				return True
 			auth_info = self.headers.get('Authorization')
@@ -1627,7 +1632,7 @@ class AdvancedHTTPServer(object):
 		self.__is_running.clear()
 		self.__server_thread = None
 
-		self.config = {
+		self.__config = {
 			'basic_auth': None,
 			'robots_txt': b'User-agent: *\nDisallow: /\n',
 			'serve_files': False,
@@ -1637,21 +1642,22 @@ class AdvancedHTTPServer(object):
 			'server_version': 'AdvancedHTTPServer/' + __version__
 		}
 
-		self._servers = []
+		self.sub_servers = []
+		"""The instances of :py:class:`.ServerNonThreaded` that are responsible for listening on each configured address."""
 		if use_threads:
 			server_klass = ServerThreaded
 		else:
 			server_klass = ServerNonThreaded
 
 		for address in addresses:
-			server = server_klass((address[0], address[1]), handler_klass, config=self.config)
+			server = server_klass((address[0], address[1]), handler_klass, config=self.__config)
 			use_ssl = (len(address) == 3 and address[2])
 			server.using_ssl = use_ssl
-			self._servers.append(server)
+			self.sub_servers.append(server)
 			self.logger.info("listening on {0}:{1}".format(address[0], address[1]) + (' with ssl' if use_ssl else ''))
 
 		self._ssl_sni_ctxs = None
-		if any([server.using_ssl for server in self._servers]):
+		if any([server.using_ssl for server in self.sub_servers]):
 			self._ssl_sni_ctxs = {}
 			if ssl_version is None or isinstance(ssl_version, str):
 				ssl_version = resolve_ssl_protocol_version(ssl_version)
@@ -1659,7 +1665,7 @@ class AdvancedHTTPServer(object):
 			self._ssl_ctx.load_cert_chain(ssl_certfile, keyfile=ssl_keyfile)
 			if g_ssl_has_server_sni:
 				self._ssl_ctx.set_servername_callback(self._ssl_servername_callback)
-			for server in self._servers:
+			for server in self.sub_servers:
 				if not server.using_ssl:
 					continue
 				server.socket = self._ssl_ctx.wrap_socket(server.socket, server_side=True)
@@ -1721,7 +1727,7 @@ class AdvancedHTTPServer(object):
 		self.__should_stop.clear()
 		self.__is_running.set()
 		while not self.__should_stop.is_set():
-			read_ready, _, _ = select.select(self._servers, [], [], 0)
+			read_ready, _, _ = select.select(self.sub_servers, [], [], 0)
 			for server in read_ready:
 				server.handle_request()
 		self.__is_shutdown.set()
@@ -1737,7 +1743,7 @@ class AdvancedHTTPServer(object):
 			self.__is_running.clear()
 		else:
 			self.__is_shutdown.wait()
-		for server in self._servers:
+		for server in self.sub_servers:
 			server.shutdown()
 
 	@property
@@ -1747,14 +1753,14 @@ class AdvancedHTTPServer(object):
 
 		:type: bool
 		"""
-		return self.config['serve_files']
+		return self.__config['serve_files']
 
 	@serve_files.setter
 	def serve_files(self, value):
 		value = bool(value)
-		if self.config['serve_files'] == value:
+		if self.__config['serve_files'] == value:
 			return
-		self.config['serve_files'] = value
+		self.__config['serve_files'] = value
 		if value:
 			self.logger.info('serving files has been enabled')
 		else:
@@ -1767,11 +1773,11 @@ class AdvancedHTTPServer(object):
 
 		:type: str
 		"""
-		return self.config['serve_files_root']
+		return self.__config['serve_files_root']
 
 	@serve_files_root.setter
 	def serve_files_root(self, value):
-		self.config['serve_files_root'] = os.path.abspath(value)
+		self.__config['serve_files_root'] = os.path.abspath(value)
 
 	@property
 	def serve_files_list_directories(self):
@@ -1781,11 +1787,11 @@ class AdvancedHTTPServer(object):
 
 		:type: bool
 		"""
-		return self.config['serve_files_list_directories']
+		return self.__config['serve_files_list_directories']
 
 	@serve_files_list_directories.setter
 	def serve_files_list_directories(self, value):
-		self.config['serve_files_list_directories'] = bool(value)
+		self.__config['serve_files_list_directories'] = bool(value)
 
 	@property
 	def serve_robots_txt(self):
@@ -1794,11 +1800,11 @@ class AdvancedHTTPServer(object):
 
 		:type: bool
 		"""
-		return self.config['serve_robots_txt']
+		return self.__config['serve_robots_txt']
 
 	@serve_robots_txt.setter
 	def serve_robots_txt(self, value):
-		self.config['serve_robots_txt'] = bool(value)
+		self.__config['serve_robots_txt'] = bool(value)
 
 	@property
 	def server_version(self):
@@ -1807,11 +1813,11 @@ class AdvancedHTTPServer(object):
 
 		:type: str
 		"""
-		return self.config['server_version']
+		return self.__config['server_version']
 
 	@server_version.setter
 	def server_version(self, value):
-		self.config['server_version'] = str(value)
+		self.__config['server_version'] = str(value)
 
 	def auth_set(self, status):
 		"""
@@ -1820,10 +1826,10 @@ class AdvancedHTTPServer(object):
 		:param bool status: Whether to enable or disable requiring authentication.
 		"""
 		if not bool(status):
-			self.config['basic_auth'] = None
+			self.__config['basic_auth'] = None
 			self.logger.info('basic authentication has been disabled')
 		else:
-			self.config['basic_auth'] = {}
+			self.__config['basic_auth'] = {}
 			self.logger.info('basic authentication has been enabled')
 
 	def auth_delete_creds(self, username=None):
@@ -1834,10 +1840,10 @@ class AdvancedHTTPServer(object):
 		:param str username: The username of the credentials to delete.
 		"""
 		if not username:
-			self.config['basic_auth'] = {}
+			self.__config['basic_auth'] = {}
 			self.logger.info('basic authentication database has been cleared of all entries')
 			return
-		del self.config['basic_auth'][username]
+		del self.__config['basic_auth'][username]
 
 	def auth_add_creds(self, username, password, pwtype='plain'):
 		"""
@@ -1856,8 +1862,8 @@ class AdvancedHTTPServer(object):
 		pwtype = pwtype.lower()
 		if not pwtype in ('plain', 'md5', 'sha1', 'sha256', 'sha384', 'sha512'):
 			raise ValueError('invalid password type, must be \'plain\', or supported by hashlib')
-		if self.config.get('basic_auth') is None:
-			self.config['basic_auth'] = {}
+		if self.__config.get('basic_auth') is None:
+			self.__config['basic_auth'] = {}
 			self.logger.info('basic authentication has been enabled')
 		if pwtype != 'plain':
 			algorithms_available = getattr(hashlib, 'algorithms_available', ()) or getattr(hashlib, 'algorithms', ())
@@ -1872,7 +1878,7 @@ class AdvancedHTTPServer(object):
 				password = password.encode('UTF-8')
 			if len(hashlib.new(pwtype, b'foobar').digest()) != len(password):
 				raise ValueError('the length of the password hash does not match the type specified')
-		self.config['basic_auth'][username] = {'value': password, 'type': pwtype}
+		self.__config['basic_auth'][username] = {'value': password, 'type': pwtype}
 
 class ServerTestCase(unittest.TestCase):
 	"""
