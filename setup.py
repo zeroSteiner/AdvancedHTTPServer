@@ -44,7 +44,7 @@ setup(
 	description='Standalone web server built on Python\'s BaseHTTPServer',
 	url='https://github.com/zeroSteiner/AdvancedHTTPServer',
 	license='BSD',
-	py_modules=['AdvancedHTTPServer'],
+	py_modules=['advancedhttpserver'],
 	classifiers=[
 		'Development Status :: 5 - Production/Stable',
 		'Environment :: Console',
