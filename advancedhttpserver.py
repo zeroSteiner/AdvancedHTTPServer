@@ -672,6 +672,9 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 			super(ServerNonThreaded, self).finish_request(request, client_address)
 		except IOError:
 			self.logger.warning('IOError encountered in finish_request')
+		except KeyboardInterrupt:
+			self.logger.warning('KeyboardInterrupt encountered in finish_request')
+			self.shutdown()
 
 	def server_bind(self, *args, **kwargs):
 		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -1729,16 +1732,19 @@ class AdvancedHTTPServer(object):
 		self.__should_stop.clear()
 		self.__is_running.set()
 		while not self.__should_stop.is_set():
-			read_ready, _, _ = select.select(self.sub_servers, [], [], 0)
-			for server in read_ready:
-				server.handle_request()
+			try:
+				read_ready, _, _ = select.select(self.sub_servers, [], [], 0)
+				for server in read_ready:
+					server.handle_request()
+			except socket.error:
+				self.logger.warning('encountered socket error, stopping server')
+				self.__should_stop.set()
 		self.__is_shutdown.set()
 		self.__is_running.clear()
 		return 0
 
 	def shutdown(self):
 		"""Shutdown the server and stop responding to requests."""
-		self.__is_running.wait()
 		self.__should_stop.set()
 		if self.__server_thread == threading.current_thread():
 			self.__is_shutdown.set()
