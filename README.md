@@ -45,8 +45,6 @@ kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
    redundant prefix removed
  - The `hmac_key` option is not longer supported
  - A single `AdvancedHTTPServer` instance can now be bound to multiple ports
- - The handler_map and rpc_handler_map attributes are now class attributes by
-   default
  - The `RequestHandler.install_handlers` method has been renamed to
    `on_init`
  - `SERIALIZER_DRIVERS` was renamed to `g_serializer_drivers`

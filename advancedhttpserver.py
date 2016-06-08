@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.1'
+__version__ = '2.0.2'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -269,6 +269,7 @@ def build_server_from_argparser(description=None, server_klass=None, handler_kla
 	parser.add_argument('-v', '--version', action='version', version=parser.prog + ' Version: ' + __version__)
 	parser.add_argument('-w', '--web-root', dest='web_root', default='.', type=_argp_dir_type, help='path to the web root directory')
 	parser.add_argument('--log-file', dest='log_file', help='log information to a file')
+	parser.add_argument('--no-threads', dest='use_threads', action='store_false', default=True, help='disable threading')
 	parser.add_argument('--password', dest='password', help='password to use for basic authentication')
 	ssl_group = parser.add_argument_group('ssl options')
 	ssl_group.add_argument('--ssl-cert', dest='ssl_cert', help='the ssl cert to use')
@@ -302,6 +303,7 @@ def build_server_from_argparser(description=None, server_klass=None, handler_kla
 		server = server_klass(
 			handler_klass,
 			address=(arguments.ip, arguments.port),
+			use_threads=arguments.use_threads,
 			ssl_certfile=arguments.ssl_cert,
 			ssl_keyfile=arguments.ssl_key,
 			ssl_version=arguments.ssl_version
@@ -665,9 +667,9 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 	def get_config(self):
 		return self.__config
 
-	def finish_request(self, *args, **kwargs):
+	def finish_request(self, request, client_address):
 		try:
-			super(ServerNonThreaded, self).finish_request(*args, **kwargs)
+			super(ServerNonThreaded, self).finish_request(request, client_address)
 		except IOError:
 			self.logger.warning('IOError encountered in finish_request')
 
@@ -714,10 +716,6 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		'.h':  'text/plain',
 	})
 	protocol_version = 'HTTP/1.1'
-	handler_map = {}
-	"""The dict object which maps regular expressions of resources to the functions which should handle them."""
-	rpc_handler_map = {}
-	"""The dict object which maps regular expressions of RPC functions to their handlers."""
 	wbufsize = 4096
 	web_socket_handler = None
 	"""An optional class to handle Web Sockets. This class must be derived from :py:class:`.WebSocketHandler`."""
@@ -729,6 +727,10 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		self.server = args[2]
 		self.headers_active = False
 		"""Whether or not the request is in the sending headers phase."""
+		self.handler_map = {}
+		"""The dict object which maps regular expressions of resources to the functions which should handle them."""
+		self.rpc_handler_map = {}
+		"""The dict object which maps regular expressions of RPC functions to their handlers."""
 		for map_name in (None, self.__class__.__name__):
 			handler_map = g_handler_map.get(map_name, {})
 			for path, function_info in handler_map.items():
@@ -889,7 +891,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			(ex_file_name, ex_line, _, _) = traceback.extract_tb(ex_traceback)[-1]
 			line_info = "{0}:{1}".format(ex_file_name, ex_line)
 			log_msg = "encountered {0} in {1}".format(repr(ex_value), line_info)
-			self.server.logger.error(log_msg)
+			self.server.logger.error(log_msg, exc_info=True)
 		status = (status or 500)
 		status_line = (status_line or http.client.responses.get(status, 'Internal Server Error')).strip()
 		self.send_response(status, status_line)
@@ -903,7 +905,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 				self.wfile.write(message)
 		elif hasattr(message, 'fileno'):
 			fs = os.fstat(message.fileno())
-			self.send_header('Content-Length', str(fs[6]))
+			self.send_header('Content-Length', fs[6])
 			self.end_headers()
 			shutil.copyfileobj(message, self.wfile)
 		else:
@@ -1971,7 +1973,7 @@ def main():
 	try:
 		server = build_server_from_argparser()
 	except ImportError:
-		server = AdvancedHTTPServer(RequestHandler)
+		server = AdvancedHTTPServer(RequestHandler, use_threads=False)
 		server.serve_files_root = '.'
 
 	server.serve_files_root = (server.serve_files_root or '.')
