@@ -693,7 +693,7 @@ class ServerThreaded(socketserver.ThreadingMixIn, ServerNonThreaded):
 	is not intended for use by other classes or functions. It is responsible for
 	listening on a single address, TCP port and SSL combination.
 	"""
-	pass
+	daemon_threads = True
 
 class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 	"""

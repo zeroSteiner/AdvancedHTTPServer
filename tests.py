@@ -356,6 +356,7 @@ class ServerBuildTests(unittest.TestCase):
 		config.set(config_section, 'port', str(random.randint(30000, 50000)))
 		server = build_server_from_config(config, config_section)
 		self.assertIsInstance(server, AdvancedHTTPServer)
+		server.shutdown()
 
 class WebSocketHTTPTests(ServerTestCase):
 	handler_class = EchoWebSocketRequestHandler
