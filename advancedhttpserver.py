@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.2'
+__version__ = '2.0.3'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -133,7 +133,7 @@ else:
 g_handler_map = {}
 g_serializer_drivers = {}
 """Dictionary of available drivers for serialization."""
-g_ssl_has_server_sni = (ssl.HAS_SNI and sys.version_info >= ((2, 7, 9) if sys.version_info[0] < 3 else (3, 4)))
+g_ssl_has_server_sni = (getattr(ssl, 'HAS_SNI', False) and sys.version_info >= ((2, 7, 9) if sys.version_info[0] < 3 else (3, 4)))
 """An indication of if the environment offers server side SNI support."""
 
 def _serialize_ext_dump(obj):
