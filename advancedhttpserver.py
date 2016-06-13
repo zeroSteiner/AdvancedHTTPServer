@@ -1227,7 +1227,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			return
 
 		if not is_method:
-			meth_args = (self,) + meth_args
+			meth_args = (self,) + tuple(meth_args)
 		response = {'result': None, 'exception_occurred': False}
 		try:
 			response['result'] = rpc_handler(*meth_args, **meth_kwargs)
