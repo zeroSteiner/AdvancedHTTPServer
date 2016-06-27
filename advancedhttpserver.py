@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.3'
+__version__ = '2.0.4'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -1235,7 +1235,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			response['exception_occurred'] = True
 			exc_name = "{0}.{1}".format(error.__class__.__module__, error.__class__.__name__)
 			response['exception'] = dict(name=exc_name, message=getattr(error, 'message', None))
-			self.server.logger.error('error: ' + exc_name + ' occurred while calling RPC method: ' + self.path)
+			self.server.logger.error('error: ' + exc_name + ' occurred while calling rpc method: ' + self.path, exc_info=True)
 
 		try:
 			response = serializer.dumps(response)
