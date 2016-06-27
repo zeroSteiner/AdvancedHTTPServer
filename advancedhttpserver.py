@@ -1002,7 +1002,11 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			self.wfile = self._wfile
 		super(RequestHandler, self).send_response(*args, **kwargs)
 		self.headers_active = True
-		if self.headers.get('Connection', None) == 'keep-alive' and self.protocol_version.upper() == 'HTTP/1.1':
+
+		# in the event that the http request is invalid, all attributes may not be defined
+		headers = getattr(self, 'headers', {})
+		protocol_version = getattr(self, 'protocol_version', 'HTTP/1.0').upper()
+		if headers.get('Connection', None) == 'keep-alive' and protocol_version == 'HTTP/1.1':
 			connection = 'keep-alive'
 		else:
 			connection = 'close'
