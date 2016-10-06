@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.5'
+__version__ = '2.0.6'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -1287,6 +1287,18 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			encoding = (header[idx + 8:].split(' ', 1)[0] or encoding)
 		return encoding
 
+class WakeupFd(object):
+	__slots__ = ('read_fd', 'write_fd')
+	def __init__(self):
+		self.read_fd, self.write_fd = os.pipe()
+
+	def close(self):
+		os.close(self.read_fd)
+		os.close(self.write_fd)
+
+	def fileno(self):
+		return self.read_fd
+
 class WebSocketHandler(object):
 	"""
 	A handler for web socket connections.
@@ -1640,6 +1652,7 @@ class AdvancedHTTPServer(object):
 		self.__is_running = threading.Event()
 		self.__is_running.clear()
 		self.__server_thread = None
+		self.__wakeup_fd = None
 
 		self.__config = {
 			'basic_auth': None,
@@ -1723,6 +1736,8 @@ class AdvancedHTTPServer(object):
 		another thread.
 
 		:param bool fork: Whether to fork or not before serving content.
+		:return: The child processes PID if *fork* is set to True.
+		:rtype: int
 		"""
 		if fork:
 			if not hasattr(os, 'fork'):
@@ -1732,14 +1747,16 @@ class AdvancedHTTPServer(object):
 				self.logger.info('forked child process: ' + str(child_pid))
 				return child_pid
 		self.__server_thread = threading.current_thread()
+		self.__wakeup_fd = WakeupFd()
 		self.__is_shutdown.clear()
 		self.__should_stop.clear()
 		self.__is_running.set()
 		while not self.__should_stop.is_set():
 			try:
-				read_ready, _, _ = select.select(self.sub_servers, [], [], 0)
+				read_ready, _, _ = select.select([self.__wakeup_fd] + self.sub_servers, [], [])
 				for server in read_ready:
-					server.handle_request()
+					if isinstance(server, http.server.HTTPServer):
+						server.handle_request()
 			except socket.error:
 				self.logger.warning('encountered socket error, stopping server')
 				self.__should_stop.set()
@@ -1754,7 +1771,12 @@ class AdvancedHTTPServer(object):
 			self.__is_shutdown.set()
 			self.__is_running.clear()
 		else:
+			if self.__wakeup_fd is not None:
+				os.write(self.__wakeup_fd.write_fd, b'\x00')
 			self.__is_shutdown.wait()
+		if self.__wakeup_fd is not None:
+			self.__wakeup_fd.close()
+			self.__wakeup_fd = None
 		for server in self.sub_servers:
 			server.shutdown()
 
