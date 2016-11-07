@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.6'
+__version__ = '2.0.7'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -1134,12 +1134,12 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		if not self.check_authorization():
 			self.respond_unauthorized(request_authentication=True)
 			return
-		if self.web_socket_handler is not None and self.headers.get('Upgrade', None).lower() == 'websocket':
-			self.web_socket_handler(self)  # pylint: disable=not-callable
-			return
 		uri = urllib.parse.urlparse(self.path)
 		self.path = uri.path
 		self.query_data = urllib.parse.parse_qs(uri.query)
+		if self.web_socket_handler is not None and self.headers.get('upgrade', '').lower() == 'websocket':
+			self.web_socket_handler(self)  # pylint: disable=not-callable
+			return
 
 		self.dispatch_handler(self.query_data)
 		return
