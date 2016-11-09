@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.7'
+__version__ = '2.0.8'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -1464,6 +1464,15 @@ class WebSocketHandler(object):
 		finally:
 			self.lock.release()
 
+	def send_message_binary(self, message):
+		return self.send_message(self._opcode_binary, message)
+
+	def send_message_ping(self, message):
+		return self.send_message(self._opcode_ping, message)
+
+	def send_message_text(self, message):
+		return self.send_message(self._opcode_text, message)
+
 	def on_closed(self):
 		"""
 		A method that can be over ridden and is called after the web socket is
@@ -1528,6 +1537,9 @@ class WebSocketHandler(object):
 		:param str message: The message data.
 		"""
 		pass
+
+	def ping(self):
+		self.send_message_ping(random_string(16))
 
 class Serializer(object):
 	"""
