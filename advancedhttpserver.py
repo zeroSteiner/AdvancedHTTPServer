@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.8'
+__version__ = '2.0.9'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -1349,8 +1349,11 @@ class WebSocketHandler(object):
 		while self.connected:
 			try:
 				self._process_message()
+			except socket.error:
+				self.logger.warning('there was a socket error while processing web socket messages')
+				self.close()
 			except Exception:
-				self.logger.error('there was an error processing messages', exc_info=True)
+				self.logger.error('there was an error while processing web socket messages', exc_info=True)
 				self.close()
 		self.handler.close_connection = 1
 
@@ -1424,11 +1427,13 @@ class WebSocketHandler(object):
 		"""
 		if not self.connected:
 			return
+		self.connected = False
+		if self.handler.wfile.closed:
+			return
 		if select.select([], [self.handler.wfile], [], 0)[1]:
 			with self.lock:
 				self.handler.wfile.write(b'\x88\x00')
 		self.handler.wfile.flush()
-		self.connected = False
 		self.on_closed()
 
 	def send_message(self, opcode, message):
@@ -1442,6 +1447,7 @@ class WebSocketHandler(object):
 			message = message.encode('utf-8')
 		length = len(message)
 		if not select.select([], [self.handler.wfile], [], 0)[1]:
+			self.logger.error('the socket is not ready for writing')
 			self.close()
 			return
 		buffer = b''
