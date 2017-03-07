@@ -67,7 +67,7 @@ ExecStop=/bin/kill -INT $MAINPID
 WantedBy=multi-user.target
 """
 
-__version__ = '2.0.9'
+__version__ = '2.0.10'
 __all__ = (
 	'AdvancedHTTPServer',
 	'RegisterPath',
@@ -120,6 +120,7 @@ if sys.version_info[0] < 3:
 	urllib.parse = urlparse
 	urllib.parse.quote = urllib.quote
 	urllib.parse.unquote = urllib.unquote
+	urllib.parse.urlencode = urllib.urlencode
 	from ConfigParser import ConfigParser
 else:
 	import html
@@ -981,8 +982,8 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			if not original_path.endswith('/'):
 				# redirect browser, doing what apache does
 				destination = self.path + '/'
-				if self.command == 'GET':
-					destination += '?' + urllib.urlencode(self.query_data, True)
+				if self.command == 'GET' and self.query_data:
+					destination += '?' + urllib.parse.urlencode(self.query_data, True)
 				self.respond_redirect(destination)
 				return
 			for index in ['index.html', 'index.htm']:
