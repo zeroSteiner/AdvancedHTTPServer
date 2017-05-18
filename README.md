@@ -45,7 +45,7 @@ kindly hosted on [ReadTheDocs](https://readthedocs.org/) at
  - The `AdvancedHTTPServer` module has been renamed `advancedhttpserver`
  - Classes prefixed with `AdvancedHTTPServer` have been renamed to have the
    redundant prefix removed
- - The `hmac_key` option is not longer supported
+ - The `hmac_key` option is no longer supported
  - A single `AdvancedHTTPServer` instance can now be bound to multiple ports
  - The `RequestHandler.install_handlers` method has been renamed to
    `on_init`
