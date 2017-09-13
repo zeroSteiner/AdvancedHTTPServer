@@ -665,6 +665,14 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 		self.using_ssl = False
 		super(ServerNonThreaded, self).__init__(*args, **kwargs)
 
+	def __repr__(self):
+		address = self.server_address[0]
+		if self.socket.family == socket.AF_INET:
+			address += ':' + str(self.server_address[1])
+		elif self.socket.family == socket.AF_INET6:
+			address = '[' + address + ']:' + str(self.server_address[1])
+		return "<{0} address: {1} ssl: {2!r}>".format(self.__class__.__name__, address, self.using_ssl)
+
 	def get_config(self):
 		return self.__config
 
