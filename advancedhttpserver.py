@@ -395,6 +395,7 @@ def build_server_from_config(config, section_name, server_klass=None, handler_kl
 class _RequestEmbryo(object):
 	__slots__ = ('server', 'socket', 'address', 'created')
 	def __init__(self, server, socket, address, created=None):
+		server.request_embryos.append(self)
 		self.server = weakref.ref(server)
 		self.socket = socket
 		self.address = address
@@ -402,6 +403,26 @@ class _RequestEmbryo(object):
 
 	def fileno(self):
 		return self.socket.fileno()
+
+	def serve_ready(self):
+		server = self.server()  # server is a weakref
+		if not server:
+			return False
+
+		try:
+			self.socket.do_handshake()
+		except ssl.SSLWantReadError:
+			return False
+		except (socket.error, OSError, ValueError):
+			self.socket.close()
+			server.request_embryos.remove(self)
+			return False
+
+		self.socket.settimeout(None)
+		server.request_embryos.remove(self)
+		server.request_queue.put((self.socket, self.address))
+		server.handle_request()
+		return True
 
 class RegisterPath(object):
 	"""
@@ -733,6 +754,16 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 		except KeyboardInterrupt:
 			self.logger.warning('KeyboardInterrupt encountered in finish_request')
 			self.shutdown()
+
+	def serve_ready(self):
+		client_socket, address = self.socket.accept()
+		client_socket.settimeout(0)
+		if self.using_ssl:
+			embryo = _RequestEmbryo(self, client_socket, address)
+			embryo.serve_ready()
+		else:
+			self.request_queue.put((client_socket, address))
+			self.handle_request()
 
 	def server_bind(self, *args, **kwargs):
 		self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -1811,41 +1842,8 @@ class AdvancedHTTPServer(object):
 			read_check.extend(sub_server.read_checkable_fds)
 		all_read_ready, _, _ = select.select(read_check, [], [])
 		for read_ready in all_read_ready:
-			if isinstance(read_ready, http.server.HTTPServer):
-				server = read_ready
-				client_socket, address = server.socket.accept()
-				if not server.using_ssl:
-					server.request_queue.put((client_socket, address))
-					server.handle_request()
-					continue
-
-				client_socket.settimeout(0)
-				embryo = _RequestEmbryo(server, client_socket, address)
-				server.request_embryos.append(embryo)
-				self._serve_embryo(embryo)
-
-			elif isinstance(read_ready, _RequestEmbryo):
-				self._serve_embryo(read_ready)
-
-	def _serve_embryo(self, embryo):
-		server = embryo.server()  # server is a weakref
-		if not server:
-			return False
-
-		try:
-			embryo.socket.do_handshake()
-		except ssl.SSLWantReadError:
-			return False
-		except (socket.error, OSError, ValueError):
-			embryo.socket.close()
-			server.request_embryos.remove(embryo)
-			return False
-
-		embryo.socket.settimeout(None)
-		server.request_embryos.remove(embryo)
-		server.request_queue.put((embryo.socket, embryo.address))
-		server.handle_request()
-		return True
+			if isinstance(read_ready, (_RequestEmbryo, http.server.HTTPServer)):
+				read_ready.serve_ready()
 
 	def serve_forever(self, fork=False):
 		"""
