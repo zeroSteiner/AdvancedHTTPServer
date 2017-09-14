@@ -757,11 +757,12 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 
 	def serve_ready(self):
 		client_socket, address = self.socket.accept()
-		client_socket.settimeout(0)
 		if self.using_ssl:
+			client_socket.settimeout(0)
 			embryo = _RequestEmbryo(self, client_socket, address)
 			embryo.serve_ready()
 		else:
+			client_socket.settimeout(None)
 			self.request_queue.put((client_socket, address))
 			self.handle_request()
 
