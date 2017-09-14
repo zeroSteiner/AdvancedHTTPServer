@@ -7,7 +7,7 @@ python:
   - "3.6"
 
 install:
-  - pip install msgpack-python pylint==1.6.5 sphinx==1.4.1 sphinx-rtd-theme websocket-client==0.37.0
+  - pip install msgpack-python pylint==1.7.2 sphinx sphinx-rtd-theme websocket-client
 
 script:
   - pylint --rcfile .pylintrc advancedhttpserver.py
