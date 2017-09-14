@@ -394,10 +394,10 @@ def build_server_from_config(config, section_name, server_klass=None, handler_kl
 
 class _RequestEmbryo(object):
 	__slots__ = ('server', 'socket', 'address', 'created')
-	def __init__(self, server, socket, address, created=None):
+	def __init__(self, server, client_socket, address, created=None):
 		server.request_embryos.append(self)
 		self.server = weakref.ref(server)
-		self.socket = socket
+		self.socket = client_socket
 		self.address = address
 		self.created = created or time.time()
 
@@ -717,8 +717,8 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 	def get_config(self):
 		return self.__config
 
-	def get_request(self, timeout=None):
-		return self.request_queue.get(block=True, timeout=timeout)
+	def get_request(self):
+		return self.request_queue.get(block=True, timeout=None)
 
 	def handle_request(self):
 		timeout = self.socket.gettimeout()
@@ -728,7 +728,7 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 			timeout = min(timeout, self.timeout)
 
 		try:
-			request, client_address = self.get_request(timeout=timeout)
+			request, client_address = self.request_queue.get(block=True, timeout=timeout)
 		except queue.Empty:
 			return self.handle_timeout()
 		except OSError:
@@ -757,11 +757,12 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 
 	def serve_ready(self):
 		client_socket, address = self.socket.accept()
-		client_socket.settimeout(0)
 		if self.using_ssl:
+			client_socket.settimeout(0)
 			embryo = _RequestEmbryo(self, client_socket, address)
 			embryo.serve_ready()
 		else:
+			client_socket.settimeout(None)
 			self.request_queue.put((client_socket, address))
 			self.handle_request()
 
@@ -1132,10 +1133,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		if ext in self.extensions_map:
 			return self.extensions_map[ext]
 		ext = ext.lower()
-		if ext in self.extensions_map:
-			return self.extensions_map[ext]
-		else:
-			return self.extensions_map['']
+		return self.extensions_map[ext if ext in self.extensions_map else '']
 
 	def stock_handler_respond_unauthorized(self, query):
 		"""This method provides a handler suitable to be used in the handler_map."""
@@ -1261,7 +1259,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 
 	def do_OPTIONS(self):
 		available_methods = list(x[3:] for x in dir(self) if x.startswith('do_'))
-		if 'RPC' in available_methods and len(self.rpc_handler_map) == 0:
+		if 'RPC' in available_methods and not self.rpc_handler_map:
 			available_methods.remove('RPC')
 		self.send_response(200)
 		self.send_header('Content-Length', 0)
@@ -1736,7 +1734,7 @@ class AdvancedHTTPServer(object):
 		"""
 		if addresses is None:
 			addresses = []
-		if address is None and len(addresses) == 0:
+		if address is None and not addresses:
 			if ssl_certfile is not None:
 				if os.getuid():
 					addresses.insert(0, ('0.0.0.0', 8443, True))
@@ -2014,7 +2012,7 @@ class AdvancedHTTPServer(object):
 			self.logger.info('basic authentication has been enabled')
 		if pwtype != 'plain':
 			algorithms_available = getattr(hashlib, 'algorithms_available', ()) or getattr(hashlib, 'algorithms', ())
-			if not pwtype in algorithms_available:
+			if pwtype not in algorithms_available:
 				raise ValueError('hashlib does not support the desired algorithm')
 			# only md5 and sha1 hex for backwards compatibility
 			if pwtype == 'md5' and len(password) == 32:
