@@ -717,8 +717,8 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 	def get_config(self):
 		return self.__config
 
-	def get_request(self, timeout=None):
-		return self.request_queue.get(block=True, timeout=timeout)
+	def get_request(self):
+		return self.request_queue.get(block=True, timeout=None)
 
 	def handle_request(self):
 		timeout = self.socket.gettimeout()
@@ -728,7 +728,7 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 			timeout = min(timeout, self.timeout)
 
 		try:
-			request, client_address = self.get_request(timeout=timeout)
+			request, client_address = self.request_queue.get(block=True, timeout=timeout)
 		except queue.Empty:
 			return self.handle_timeout()
 		except OSError:
