@@ -107,6 +107,7 @@ import time
 import traceback
 import unittest
 import urllib
+import weakref
 import zlib
 
 if sys.version_info[0] < 3:
@@ -114,6 +115,7 @@ if sys.version_info[0] < 3:
 	import cgi as html
 	import Cookie
 	import httplib
+	import Queue as queue
 	import SocketServer as socketserver
 	import urlparse
 	http = type('http', (), {'client': httplib, 'cookies': Cookie, 'server': BaseHTTPServer})
@@ -127,6 +129,7 @@ else:
 	import http.client
 	import http.cookies
 	import http.server
+	import queue
 	import socketserver
 	import urllib.parse
 	from configparser import ConfigParser
@@ -388,6 +391,17 @@ def build_server_from_config(config, section_name, server_klass=None, handler_kl
 		if config.has_option(section_name, 'list_directories'):
 			server.serve_files_list_directories = config.getboolean(section_name, 'list_directories')
 	return server
+
+class _RequestEmbryo(object):
+	__slots__ = ('server', 'socket', 'address', 'created')
+	def __init__(self, server, socket, address, created=None):
+		self.server = weakref.ref(server)
+		self.socket = socket
+		self.address = address
+		self.created = created or time.time()
+
+	def fileno(self):
+		return self.socket.fileno()
 
 class RegisterPath(object):
 	"""
@@ -662,6 +676,8 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 		if not hasattr(self, 'logger'):
 			self.logger = logging.getLogger('AdvancedHTTPServer')
 		self.allow_reuse_address = True
+		self.request_queue = queue.Queue()
+		self.request_embryos = []
 		self.using_ssl = False
 		super(ServerNonThreaded, self).__init__(*args, **kwargs)
 
@@ -673,8 +689,41 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 			address = '[' + address + ']:' + str(self.server_address[1])
 		return "<{0} address: {1} ssl: {2!r}>".format(self.__class__.__name__, address, self.using_ssl)
 
+	@property
+	def read_checkable_fds(self):
+		return [self] + self.request_embryos
+
 	def get_config(self):
 		return self.__config
+
+	def get_request(self, timeout=None):
+		return self.request_queue.get(block=True, timeout=timeout)
+
+	def handle_request(self):
+		timeout = self.socket.gettimeout()
+		if timeout is None:
+			timeout = self.timeout
+		elif self.timeout is not None:
+			timeout = min(timeout, self.timeout)
+
+		try:
+			request, client_address = self.get_request(timeout=timeout)
+		except queue.Empty:
+			return self.handle_timeout()
+		except OSError:
+			return
+
+		if self.verify_request(request, client_address):
+			try:
+				self.process_request(request, client_address)
+			except Exception:
+				self.handle_error(request, client_address)
+				self.shutdown_request(request)
+			except:
+				self.shutdown_request(request)
+				raise
+		else:
+			self.shutdown_request(request)
 
 	def finish_request(self, request, client_address):
 		try:
@@ -1717,7 +1766,7 @@ class AdvancedHTTPServer(object):
 			for server in self.sub_servers:
 				if not server.using_ssl:
 					continue
-				server.socket = self._ssl_ctx.wrap_socket(server.socket, server_side=True)
+				server.socket = self._ssl_ctx.wrap_socket(server.socket, server_side=True, do_handshake_on_connect=False)
 
 		if hasattr(handler_klass, 'custom_authentication'):
 			self.logger.debug('a custom authentication function is being used')
@@ -1756,6 +1805,48 @@ class AdvancedHTTPServer(object):
 	def server_started(self):
 		return self.__server_thread is not None
 
+	def _serve_ready(self):
+		read_check = [self.__wakeup_fd]
+		for sub_server in self.sub_servers:
+			read_check.extend(sub_server.read_checkable_fds)
+		all_read_ready, _, _ = select.select(read_check, [], [])
+		for read_ready in all_read_ready:
+			if isinstance(read_ready, http.server.HTTPServer):
+				server = read_ready
+				client_socket, address = server.socket.accept()
+				if not server.using_ssl:
+					server.request_queue.put((client_socket, address))
+					server.handle_request()
+					continue
+
+				client_socket.settimeout(0)
+				embryo = _RequestEmbryo(server, client_socket, address)
+				server.request_embryos.append(embryo)
+				self._serve_embryo(embryo)
+
+			elif isinstance(read_ready, _RequestEmbryo):
+				self._serve_embryo(read_ready)
+
+	def _serve_embryo(self, embryo):
+		server = embryo.server()  # server is a weakref
+		if not server:
+			return False
+
+		try:
+			embryo.socket.do_handshake()
+		except ssl.SSLWantReadError:
+			return False
+		except (socket.error, OSError, ValueError):
+			embryo.socket.close()
+			server.request_embryos.remove(embryo)
+			return False
+
+		embryo.socket.settimeout(None)
+		server.request_embryos.remove(embryo)
+		server.request_queue.put((embryo.socket, embryo.address))
+		server.handle_request()
+		return True
+
 	def serve_forever(self, fork=False):
 		"""
 		Start handling requests. This method must be called and does not
@@ -1780,10 +1871,7 @@ class AdvancedHTTPServer(object):
 		self.__is_running.set()
 		while not self.__should_stop.is_set():
 			try:
-				read_ready, _, _ = select.select([self.__wakeup_fd] + self.sub_servers, [], [])
-				for server in read_ready:
-					if isinstance(server, http.server.HTTPServer):
-						server.handle_request()
+				self._serve_ready()
 			except socket.error:
 				self.logger.warning('encountered socket error, stopping server')
 				self.__should_stop.set()
