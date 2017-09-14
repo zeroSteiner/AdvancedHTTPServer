@@ -394,10 +394,10 @@ def build_server_from_config(config, section_name, server_klass=None, handler_kl
 
 class _RequestEmbryo(object):
 	__slots__ = ('server', 'socket', 'address', 'created')
-	def __init__(self, server, socket, address, created=None):
+	def __init__(self, server, client_socket, address, created=None):
 		server.request_embryos.append(self)
 		self.server = weakref.ref(server)
-		self.socket = socket
+		self.socket = client_socket
 		self.address = address
 		self.created = created or time.time()
 
