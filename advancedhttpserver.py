@@ -1133,10 +1133,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		if ext in self.extensions_map:
 			return self.extensions_map[ext]
 		ext = ext.lower()
-		if ext in self.extensions_map:
-			return self.extensions_map[ext]
-		else:
-			return self.extensions_map['']
+		return self.extensions_map[ext if ext in self.extensions_map else '']
 
 	def stock_handler_respond_unauthorized(self, query):
 		"""This method provides a handler suitable to be used in the handler_map."""
@@ -1262,7 +1259,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 
 	def do_OPTIONS(self):
 		available_methods = list(x[3:] for x in dir(self) if x.startswith('do_'))
-		if 'RPC' in available_methods and len(self.rpc_handler_map) == 0:
+		if 'RPC' in available_methods and not self.rpc_handler_map:
 			available_methods.remove('RPC')
 		self.send_response(200)
 		self.send_header('Content-Length', 0)
@@ -1737,7 +1734,7 @@ class AdvancedHTTPServer(object):
 		"""
 		if addresses is None:
 			addresses = []
-		if address is None and len(addresses) == 0:
+		if address is None and not addresses:
 			if ssl_certfile is not None:
 				if os.getuid():
 					addresses.insert(0, ('0.0.0.0', 8443, True))
@@ -2015,7 +2012,7 @@ class AdvancedHTTPServer(object):
 			self.logger.info('basic authentication has been enabled')
 		if pwtype != 'plain':
 			algorithms_available = getattr(hashlib, 'algorithms_available', ()) or getattr(hashlib, 'algorithms', ())
-			if not pwtype in algorithms_available:
+			if pwtype not in algorithms_available:
 				raise ValueError('hashlib does not support the desired algorithm')
 			# only md5 and sha1 hex for backwards compatibility
 			if pwtype == 'md5' and len(password) == 32:
