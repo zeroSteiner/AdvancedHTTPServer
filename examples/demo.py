@@ -37,7 +37,7 @@ from advancedhttpserver import *
 from advancedhttpserver import __version__
 
 class DemoHandler(RequestHandler):
-	def install_handlers(self):
+	def on_init(self):
 		self.handler_map['^redirect_to_google$'] = lambda handler, query: self.respond_redirect('http://www.google.com/')
 		self.handler_map['^hello_world$'] = self.res_hello_world
 		self.handler_map['^exception$'] = self.res_exception
@@ -45,7 +45,7 @@ class DemoHandler(RequestHandler):
 		self.rpc_handler_map['/xor'] = self.rpc_xor
 
 	def res_hello_world(self, query):
-		message = 'Hello World!\r\n\r\n'
+		message = b'Hello World!\r\n\r\n'
 		self.send_response(200)
 		self.send_header('Content-Length', len(message))
 		self.end_headers()
