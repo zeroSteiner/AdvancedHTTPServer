@@ -15,4 +15,5 @@ freely distributed and packaged with other software.
    :numbered:
    :maxdepth: 1
 
+   overview.rst
    advancedhttpserver.rst

@@ -49,8 +49,6 @@ class DemoHandler(RequestHandler):
 		self.send_response(200)
 		self.send_header('Content-Length', len(message))
 		self.end_headers()
-		if self.basic_auth_user:
-			self.wfile.write('Username: ' + self.basic_auth_user + '\r\n')
 		self.wfile.write(message)
 		return
 
