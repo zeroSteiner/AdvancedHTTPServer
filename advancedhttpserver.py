@@ -732,7 +732,7 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 		except queue.Empty:
 			return self.handle_timeout()
 		except OSError:
-			return
+			return None
 
 		if self.verify_request(request, client_address):
 			try:
@@ -745,6 +745,7 @@ class ServerNonThreaded(http.server.HTTPServer, object):
 				raise
 		else:
 			self.shutdown_request(request)
+		return None
 
 	def finish_request(self, request, client_address):
 		try:
@@ -891,7 +892,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			file_obj = open(file_path, 'rb')
 		except IOError:
 			self.respond_not_found()
-			return None
+			return
 		self.send_response(200)
 		self.send_header('Content-Type', self.guess_mime_type(file_path))
 		fs = os.fstat(file_obj.fileno())
@@ -917,7 +918,7 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 			dir_contents = os.listdir(dir_path)
 		except os.error:
 			self.respond_not_found()
-			return None
+			return
 		if os.path.normpath(dir_path) != self.__config['serve_files_root']:
 			dir_contents.append('..')
 		dir_contents.sort(key=lambda a: a.lower())
