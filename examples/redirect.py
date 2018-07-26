@@ -39,7 +39,7 @@ from advancedhttpserver import __version__
 
 class RedirectHandler(RequestHandler):
 	target_url = 'http://127.0.0.1'
-	def install_handlers(self):
+	def on_init(self):
 		self.handler_map['.*'] = self.redirect
 
 	def redirect(self, query):
@@ -50,7 +50,7 @@ class RedirectHandler(RequestHandler):
 		return
 
 def main():
-	parser = argparse.ArgumentParser(description='AdvancedHTTPServer Redirect', conflict_handler='resolve', version=__version__)
+	parser = argparse.ArgumentParser(description='AdvancedHTTPServer Redirect', conflict_handler='resolve')
 	parser.add_argument('target_url', help='the url to redirect to')
 	arguments = parser.parse_args()
 
