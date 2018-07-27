@@ -822,9 +822,9 @@ class RequestHandler(http.server.BaseHTTPRequestHandler, object):
 		self.headers_active = False
 		"""Whether or not the request is in the sending headers phase."""
 		self.handler_map = {}
-		"""The dict object which maps regular expressions of resources to the functions which should handle them."""
+		"""The dictionary object which maps regular expressions of resources to the functions which should handle them."""
 		self.rpc_handler_map = {}
-		"""The dict object which maps regular expressions of RPC functions to their handlers."""
+		"""The dictionary object which maps regular expressions of RPC functions to their handlers."""
 		for map_name in (None, self.__class__.__name__):
 			handler_map = g_handler_map.get(map_name, {})
 			for path, function_info in handler_map.items():
