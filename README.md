@@ -14,14 +14,15 @@ file.
 ## Features
 AdvancedHTTPServer builds on top of Python's included BaseHTTPServer and
 provides out of the box support for additional commonly needed features such as:
- - Threading
- - SSL
+ - Threaded request handling
+ - Binding to multiple interfaces
+ - SSL and SNI support
  - Registering handler functions to HTTP resources
  - A default robots.txt file
- - Forking the server process
- - Basic Authentication
- - The HTTP verbs GET HEAD POST and OPTIONS
- - RPC over HTTP
+ - Basic authentication
+ - The HTTP verbs GET, HEAD, POST, and OPTIONS
+ - Remote Procedure Call (RPC) over HTTP
+ - WebSockets
 
 ## Dependencies
 AdvancedHTTPServer does not have any additional dependencies outside of the

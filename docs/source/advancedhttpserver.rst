@@ -1,9 +1,8 @@
-:mod:`advancedhttpserver` --- Python HTTP Server
-================================================
+:mod:`advancedhttpserver` -- API Reference
+==========================================
 
 .. module:: advancedhttpserver
-   :synopsis: Python HTTP Server
-
+   :synopsis: API Reference
 
 Data
 ----
