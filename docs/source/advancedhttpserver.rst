@@ -73,3 +73,6 @@ Exceptions
 .. autoexception:: RPCError
    :members:
    :undoc-members:
+
+.. autoexception:: RPCConnectionError
+   :members:

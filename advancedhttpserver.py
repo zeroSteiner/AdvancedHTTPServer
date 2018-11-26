@@ -60,7 +60,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/sbin/runuser -l nobody -c "/usr/bin/python -m advhttpsrv -c /etc/pyhttpd.conf"
+ExecStart=/sbin/runuser -l nobody -c "/usr/bin/python -m advancedhttpserver -c /etc/pyhttpd.conf"
 ExecStop=/bin/kill -INT $MAINPID
 
 [Install]
@@ -75,6 +75,7 @@ __all__ = (
 	'RPCClient',
 	'RPCClientCached',
 	'RPCError',
+	'RPCConnectionError',
 	'ServerTestCase',
 	'WebSocketHandler',
 	'build_server_from_argparser',
@@ -465,7 +466,7 @@ class RPCError(Exception):
 	This class represents an RPC error either local or remote. Any errors
 	in routines executed on the server will raise this error.
 	"""
-	def __init__(self, message, status, remote_exception=None):
+	def __init__(self, message, status=None, remote_exception=None):
 		super(RPCError, self).__init__()
 		self.message = message
 		self.status = status
@@ -488,6 +489,15 @@ class RPCError(Exception):
 		:type: bool
 		"""
 		return bool(self.remote_exception is not None)
+
+class RPCConnectionError(RPCError):
+	"""
+	An exception raised when there is a connection-related error encountered by
+	the RPC client.
+
+	.. versionadded:: 2.1.0
+	"""
+	pass
 
 class RPCClient(object):
 	"""
@@ -596,7 +606,7 @@ class RPCClient(object):
 				self.client.request('RPC', method, options, headers)
 				resp = self.client.getresponse()
 		except http.client.ImproperConnectionState:
-			raise RPCError('improper connection state', None)
+			raise RPCConnectionError('improper connection state')
 		if resp.status != 200:
 			raise RPCError(resp.reason, resp.status)
 
