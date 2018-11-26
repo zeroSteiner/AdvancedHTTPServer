@@ -1,0 +1,80 @@
+AdvancedHTTPServer
+==================
+
+Standalone web server built on Python’s BaseHTTPServer
+
+|Build Status| |Documentation Status| |Github Issues| |PyPi Release|
+
+License
+-------
+
+AdvancedHTTPServer is released under the BSD 3-clause license, for more
+details see the
+`LICENSE <https://github.com/zeroSteiner/AdvancedHTTPServer/blob/master/LICENSE>`__
+file.
+
+Features
+--------
+
+AdvancedHTTPServer builds on top of Python’s included BaseHTTPServer and
+provides out of the box support for additional commonly needed features
+such as: - Threaded request handling - Binding to multiple interfaces -
+SSL and SNI support - Registering handler functions to HTTP resources -
+A default robots.txt file - Basic authentication - The HTTP verbs GET,
+HEAD, POST, and OPTIONS - Remote Procedure Call (RPC) over HTTP -
+WebSockets
+
+Dependencies
+------------
+
+AdvancedHTTPServer does not have any additional dependencies outside of
+the Python standard library.
+
+The following version of Python are currently supported:
+
+- Python 2.7
+- Python 3.3
+- Python 3.4
+- Python 3.5
+- Python 3.6
+- Python 3.7
+
+Code Documentation
+------------------
+
+AdvancedHTTPServer uses Sphinx for internal code documentation. This
+documentation can be generated from source with the command
+``sphinx-build docs/source docs/html``. The latest documentation is
+kindly hosted on `ReadTheDocs <https://readthedocs.org/>`__ at
+`advancedhttpserver.readthedocs.io <https://advancedhttpserver.readthedocs.io/en/latest/>`__.
+
+Changes In Version 2.0
+----------------------
+
+-  The ``AdvancedHTTPServer`` module has been renamed
+   ``advancedhttpserver``
+-  Classes prefixed with ``AdvancedHTTPServer`` have been renamed to
+   have the redundant prefix removed
+-  The ``hmac_key`` option is no longer supported
+-  A single ``AdvancedHTTPServer`` instance can now be bound to multiple
+   ports
+-  The ``RequestHandler.install_handlers`` method has been renamed to
+   ``on_init``
+-  ``SERIALIZER_DRIVERS`` was renamed to ``g_serializer_drivers``
+-  Support for multiple hostnames with SSL using the SNI extension
+-  Support for persistent HTTP 1.1 TCP connections
+
+Powered By AdvancedHTTPServer
+-----------------------------
+
+-  `King Phisher <https://github.com/securestate/king-phisher>`__
+   Phishing Campaign Toolkit
+
+.. |Build Status| image:: http://img.shields.io/travis/zeroSteiner/AdvancedHTTPServer.svg?style=flat-square
+   :target: https://travis-ci.org/zeroSteiner/AdvancedHTTPServer
+.. |Documentation Status| image:: https://readthedocs.org/projects/advancedhttpserver/badge/?version=latest&style=flat-square
+   :target: http://advancedhttpserver.readthedocs.org/en/latest
+.. |Github Issues| image:: http://img.shields.io/github/issues/zerosteiner/AdvancedHTTPServer.svg?style=flat-square
+   :target: https://github.com/zerosteiner/AdvancedHTTPServer/issues
+.. |PyPi Release| image:: https://img.shields.io/pypi/v/AdvancedHTTPServer.svg?style=flat-square
+   :target: https://pypi.python.org/pypi/AdvancedHTTPServer

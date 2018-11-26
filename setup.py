@@ -33,15 +33,33 @@
 #  Homepage: https://github.com/zeroSteiner/AdvancedHTTPServer
 #  Author:   Spencer McIntyre (zeroSteiner)
 
-from distutils.core import setup
+import os
+import sys
+
+base_directory = os.path.dirname(__file__)
+
+try:
+	from setuptools import setup, find_packages
+except ImportError:
+	print('This project needs setuptools in order to build. Install it using your package')
+	print('manager (usually python-setuptools) or via pip (pip install setuptools).')
+	sys.exit(1)
+
+with open(os.path.join(base_directory, 'README.rst'), 'r') as file_h:
+	long_description = file_h.read()
 
 from advancedhttpserver import __version__
+
+DESCRIPTION = """\
+A standalone web server built on Python\'s BaseHTTPServer.\
+"""
 
 setup(
 	name='AdvancedHTTPServer',
 	version=__version__,
 	author='Spencer McIntyre',
-	description='Standalone web server built on Python\'s BaseHTTPServer',
+	description=DESCRIPTION,
+	long_description=long_description,
 	url='https://github.com/zeroSteiner/AdvancedHTTPServer',
 	license='BSD',
 	py_modules=['advancedhttpserver'],
