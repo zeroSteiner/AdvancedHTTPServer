@@ -84,6 +84,7 @@ __all__ = (
 
 import base64
 import binascii
+import collections
 import datetime
 import hashlib
 import io
@@ -1724,6 +1725,27 @@ class Serializer(object):
 			data = tuple(data)
 		return data
 
+SSLSNICertificate = collections.namedtuple('SSLSNICertificate', ('hostname', 'certfile', 'keyfile'))
+"""
+The information for a certificate used by SSL's Server Name Indicator (SNI)
+extension.
+
+.. versionadded:: 2.2.0
+
+.. py:attribute:: hostname
+
+	The hostname string for requests which should use this certificate information.
+
+.. py:attribute:: certfile
+
+	The path to the SSL certificate file on disk to use for the hostname.
+
+.. py:attribute:: keyfile
+
+	The path to the SSL key file on disk to use for the hostname.
+"""
+SSLSNIEntry = collections.namedtuple('SSLSNIEntry', ('certificate', 'context'))
+
 class AdvancedHTTPServer(object):
 	"""
 	This is the primary server class for the AdvancedHTTPServer module.
@@ -1794,9 +1816,9 @@ class AdvancedHTTPServer(object):
 			self.sub_servers.append(server)
 			self.logger.info("listening on {0}:{1}".format(address[0], address[1]) + (' with ssl' if use_ssl else ''))
 
-		self._ssl_sni_ctxs = None
+		self._ssl_sni_entries = None
 		if any([server.using_ssl for server in self.sub_servers]):
-			self._ssl_sni_ctxs = {}
+			self._ssl_sni_entries = {}
 			if ssl_version is None or isinstance(ssl_version, str):
 				ssl_version = resolve_ssl_protocol_version(ssl_version)
 			self._ssl_ctx = ssl.SSLContext(ssl_version)
@@ -1813,18 +1835,27 @@ class AdvancedHTTPServer(object):
 			self.auth_set(True)
 
 	def _ssl_servername_callback(self, sock, hostname, context):
-		new_context = self._ssl_sni_ctxs.get(hostname)
-		if new_context is None:
-			return None
-		sock.context = new_context
+		sni_entry = self._ssl_sni_entries.get(hostname)
+		if sni_entry:
+			self.logger.debug('setting a new ssl context for sni hostname: %s', hostname)
+			sock.context = sni_entry.context
 		return None
 
 	def add_sni_cert(self, hostname, ssl_certfile=None, ssl_keyfile=None, ssl_version=None):
 		"""
 		Add an SSL certificate for a specific hostname as supported by SSL's
-		server name indicator extension. See :rfc:`3546` for more details on
-		SSL extensions. In order to use this method, the server instance must
+		Server Name Indicator (SNI) extension. See :rfc:`3546` for more details
+		on SSL extensions. In order to use this method, the server instance must
 		have been initialized with at least one address configured for SSL.
+
+		.. warning::
+
+			This method will raise a :py:exc:`RuntimeError` if either the SNI
+			extension is not available in the :py:mod:`ssl` module or if SSL was
+			not enabled at initialization time through the use of arguments to
+			:py:meth:`~.__init__`.
+
+		.. versionadded:: 2.0.0
 
 		:param str hostname: The hostname for this configuration.
 		:param str ssl_certfile: An SSL certificate file to use, setting this enables SSL.
@@ -1833,13 +1864,54 @@ class AdvancedHTTPServer(object):
 		"""
 		if not g_ssl_has_server_sni:
 			raise RuntimeError('the ssl server name indicator extension is unavailable')
-		if self._ssl_sni_ctxs is None:
+		if self._ssl_sni_entries is None:
 			raise RuntimeError('ssl was not enabled on initialization')
+		if ssl_certfile:
+			ssl_certfile = os.path.abspath(ssl_certfile)
+		if ssl_keyfile:
+			ssl_keyfile = os.path.abspath(ssl_keyfile)
+		cert_info = SSLSNICertificate(hostname, ssl_certfile, ssl_keyfile)
 		if ssl_version is None or isinstance(ssl_version, str):
 			ssl_version = resolve_ssl_protocol_version(ssl_version)
 		ssl_ctx = ssl.SSLContext(ssl_version)
 		ssl_ctx.load_cert_chain(ssl_certfile, keyfile=ssl_keyfile)
-		self._ssl_sni_ctxs[hostname] = ssl_ctx
+		self._ssl_sni_entries[hostname] = SSLSNIEntry(context=ssl_ctx, certificate=cert_info)
+
+	def remove_sni_cert(self, hostname):
+		"""
+		Remove the SSL Server Name Indicator (SNI) certificate configuration for
+		the specified *hostname*.
+
+		.. warning::
+
+			This method will raise a :py:exc:`RuntimeError` if either the SNI
+			extension is not available in the :py:mod:`ssl` module or if SSL was
+			not enabled at initialization time through the use of arguments to
+			:py:meth:`~.__init__`.
+
+		.. versionadded:: 2.2.0
+
+		:param str hostname: The hostname to delete the SNI configuration for.
+		"""
+		if not g_ssl_has_server_sni:
+			raise RuntimeError('the ssl server name indicator extension is unavailable')
+		if self._ssl_sni_entries is None:
+			raise RuntimeError('ssl was not enabled on initialization')
+		sni_entry = self._ssl_sni_entries.pop(hostname, None)
+		if sni_entry is None:
+			raise ValueError('the specified hostname does not have an sni certificate configuration')
+
+	@property
+	def sni_certs(self):
+		"""
+		.. versionadded:: 2.2.0
+
+		:return: Return a tuple of :py:class:`~.SSLSNICertificate` instances for each of the certificates that are configured.
+		:rtype: tuple
+		"""
+		if not g_ssl_has_server_sni or self._ssl_sni_entries is None:
+			return tuple()
+		return tuple(entry.certificate for entry in self._ssl_sni_entries.values())
 
 	@property
 	def server_started(self):

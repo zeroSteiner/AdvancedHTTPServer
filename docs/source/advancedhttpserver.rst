@@ -63,6 +63,7 @@ Classes
 .. autoclass:: ServerThreaded
    :members:
 
+.. autoclass:: SSLSNICertificate
 
 .. autoclass:: WebSocketHandler
    :members:

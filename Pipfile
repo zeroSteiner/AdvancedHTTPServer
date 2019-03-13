@@ -5,7 +5,10 @@ verify_ssl = true
 
 [dev-packages]
 sphinx = "*"
+websocket-client = "*"
+sphinx-rtd-theme = "*"
 
 [packages]
+msgpack = "*"
 
 [requires]
