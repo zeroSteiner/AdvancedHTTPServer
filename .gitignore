@@ -5,8 +5,10 @@
 .buildinfo
 .doctrees/*
 .idea/*
+AdvancedHTTPServer.egg-info/*
 build/*
 dist/*
 docs/build
 docs/html
 MANIFEST
+Pipfile.lock
